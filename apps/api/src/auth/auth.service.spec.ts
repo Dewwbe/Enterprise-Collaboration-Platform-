@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { ConflictException, UnauthorizedException } from '@nestjs/common';
+import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import * as bcrypt from 'bcrypt';
 import { AuthService } from './auth.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -9,8 +10,15 @@ import { PrismaService } from '../prisma/prisma.service';
 describe('AuthService', () => {
   let service: AuthService;
   let prisma: {
-    user: { findUnique: jest.Mock; create: jest.Mock };
-    refreshToken: { create: jest.Mock; update: jest.Mock; updateMany: jest.Mock };
+    user: {
+      findUnique: jest.Mock<(...args: any[]) => Promise<any>>;
+      create: jest.Mock<(...args: any[]) => Promise<any>>;
+    };
+    refreshToken: {
+      create: jest.Mock<(...args: any[]) => Promise<any>>;
+      update: jest.Mock<(...args: any[]) => Promise<any>>;
+      updateMany: jest.Mock<(...args: any[]) => Promise<any>>;
+    };
   };
 
   const mockUser = {
@@ -26,8 +34,15 @@ describe('AuthService', () => {
     mockUser.passwordHash = await bcrypt.hash('Str0ngP@ssword!', 12);
 
     prisma = {
-      user: { findUnique: jest.fn(), create: jest.fn() },
-      refreshToken: { create: jest.fn(), update: jest.fn(), updateMany: jest.fn() },
+      user: {
+        findUnique: jest.fn<(...args: any[]) => Promise<any>>(),
+        create: jest.fn<(...args: any[]) => Promise<any>>(),
+      },
+      refreshToken: {
+        create: jest.fn<(...args: any[]) => Promise<any>>(),
+        update: jest.fn<(...args: any[]) => Promise<any>>(),
+        updateMany: jest.fn<(...args: any[]) => Promise<any>>(),
+      },
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -85,7 +100,9 @@ describe('AuthService', () => {
       });
 
       expect(prisma.user.create).toHaveBeenCalled();
-      const createArgs = prisma.user.create.mock.calls[0][0];
+      const createArgs = prisma.user.create.mock.calls[0][0] as {
+        data: { passwordHash: string };
+      };
       expect(createArgs.data.passwordHash).not.toBe('Str0ngP@ssword!');
       expect(result.accessToken).toBe('signed.jwt.token');
       expect(result.user.email).toBe(mockUser.email);

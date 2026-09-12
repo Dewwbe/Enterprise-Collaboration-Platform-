@@ -1,0 +1,12 @@
+{
+  "name": "@ecp/shared-types",
+  "version": "0.1.0",
+  "private": true,
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "scripts": {
+    "lint": "echo \"no-op: type-only package\"",
+    "test": "echo \"no-op: type-only package\"",
+    "build": "echo \"no-op: type-only package, consumed as source\""
+  }
+}

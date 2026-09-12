@@ -7,6 +7,7 @@ import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { AuthResponseDto } from './dto/auth-response.dto';
 import { Public } from '../common/decorators/public.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
+import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { JwtRefreshAuthGuard } from './guards/jwt-refresh-auth.guard';
 
 @ApiTags('auth')
@@ -44,9 +45,9 @@ export class AuthController {
   @ApiBearerAuth()
   @Post('logout')
   @HttpCode(HttpStatus.NO_CONTENT)
-  @UseGuards(JwtRefreshAuthGuard)
-  @ApiOperation({ summary: 'Revoke the presented refresh token' })
-  async logout(@CurrentUser() user: { tokenId: string }): Promise<void> {
-    await this.authService.logout(user.tokenId);
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({ summary: 'Revoke all active refresh tokens for the user' })
+  async logout(@CurrentUser() user: { userId: string }): Promise<void> {
+    await this.authService.logoutAll(user.userId);
   }
 }
