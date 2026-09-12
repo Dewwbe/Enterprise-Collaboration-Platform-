@@ -1,0 +1,76 @@
+version: "3.9"
+
+# Runs the entire platform: infra (Postgres/Redis) + both apps.
+# For backend-only work, `apps/api/docker-compose.yml` still works standalone.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: ecp-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ecp_user
+      POSTGRES_PASSWORD: ecp_password
+      POSTGRES_DB: ecp_db
+    ports:
+      - "5433:5432"
+    volumes:
+      - ecp_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ecp_user -d ecp_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: ecp-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: ./apps/api
+      dockerfile: Dockerfile
+      target: development
+    container_name: ecp-api
+    restart: unless-stopped
+    command: npm run start:dev
+    env_file:
+      - ./apps/api/.env
+    ports:
+      - "3000:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./apps/api/src:/app/src
+      - ./apps/api/prisma:/app/prisma
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      target: development
+    container_name: ecp-web
+    restart: unless-stopped
+    environment:
+      VITE_API_URL: http://localhost:3000/api/v1
+    ports:
+      - "5173:5173"
+    depends_on:
+      - api
+    volumes:
+      - ./apps/web/src:/repo/apps/web/src
+      - ./packages/shared-types/src:/repo/packages/shared-types/src
+
+volumes:
+  ecp_postgres_data:
