@@ -8,6 +8,7 @@ import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
 import { OrganizationsModule } from './organizations/organizations.module';
 import { WorkspacesModule } from './workspaces/workspaces.module';
+import { TasksModule } from './tasks/tasks.module';
 import { ProjectsModule } from './projects/projects.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { GlobalExceptionFilter } from './common/filters/http-exception.filter';
@@ -36,6 +37,7 @@ import { TransformInterceptor } from './common/interceptors/transform.intercepto
     UsersModule,
     OrganizationsModule,
     WorkspacesModule,
+    TasksModule,
     ProjectsModule,
   ],
   providers: [
