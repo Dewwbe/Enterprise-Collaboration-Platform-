@@ -8,18 +8,21 @@ import { Reflector } from '@nestjs/core';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ROLES_KEY } from '../decorators/roles.decorator';
 import { ROLE_HIERARCHY, WorkspaceRole } from '../enums/workspace-role.enum';
+import { WorkspaceScopeResolver } from '../services/workspace-scope-resolver.service';
 
 /**
- * Enforces workspace-level RBAC. Requires the route to carry `workspaceId` as a
- * route param (e.g. `:workspaceId`) so the guard can resolve the caller's
- * membership role for that specific workspace and compare it against the
- * minimum role set via @Roles(...). Fails closed: no membership => 403.
+ * Enforces workspace-level RBAC. Resolves the caller's workspace membership via
+ * WorkspaceScopeResolver, which accepts :workspaceId directly or indirectly via
+ * :projectId/:taskId - so the same guard covers Workspaces, Projects, Tasks, and
+ * Comments routes without each module re-deriving workspace context itself.
+ * Fails closed: no membership => 403, unresolvable/foreign scope => 404.
  */
 @Injectable()
 export class RolesGuard implements CanActivate {
   constructor(
     private readonly reflector: Reflector,
     private readonly prisma: PrismaService,
+    private readonly scopeResolver: WorkspaceScopeResolver,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -34,16 +37,16 @@ export class RolesGuard implements CanActivate {
 
     const request = context.switchToHttp().getRequest();
     const userId: string | undefined = request.user?.userId;
-    const workspaceId: string | undefined = request.params?.workspaceId;
-
-    if (!userId || !workspaceId) {
+    if (!userId) {
       throw new ForbiddenException(
-        'Workspace context is required to evaluate access for this route.',
+        'Authentication is required to evaluate access for this route.',
       );
     }
 
+    const scope = await this.scopeResolver.resolve(request.params);
+
     const membership = await this.prisma.workspaceMember.findUnique({
-      where: { workspaceId_userId: { workspaceId, userId } },
+      where: { workspaceId_userId: { workspaceId: scope.workspaceId, userId } },
     });
 
     if (!membership) {
@@ -59,8 +62,9 @@ export class RolesGuard implements CanActivate {
       throw new ForbiddenException('Your workspace role does not permit this action.');
     }
 
-    // Attach for downstream handlers/services that want the resolved role
+    // Attach for downstream handlers/services that want the resolved scope/role
     // without a second lookup.
+    request.workspaceScope = scope;
     request.workspaceMembership = membership;
     return true;
   }

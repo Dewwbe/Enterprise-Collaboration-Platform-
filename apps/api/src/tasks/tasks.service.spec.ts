@@ -1,18 +1,12 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import {
-  BadRequestException,
-  ForbiddenException,
-  NotFoundException,
-} from '@nestjs/common';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { TasksService } from './tasks.service';
 import { PrismaService } from '../prisma/prisma.service';
-import { WorkspaceRole } from '../common/enums/workspace-role.enum';
 import { TaskStatus } from '../common/enums/task-status.enum';
 
 describe('TasksService', () => {
   let service: TasksService;
   let prisma: {
-    project: { findUnique: jest.Mock };
     workspaceMember: { findUnique: jest.Mock };
     task: {
       findUnique: jest.Mock;
@@ -26,7 +20,6 @@ describe('TasksService', () => {
 
   beforeEach(async () => {
     prisma = {
-      project: { findUnique: jest.fn() },
       workspaceMember: { findUnique: jest.fn() },
       task: {
         findUnique: jest.fn(),
@@ -46,51 +39,21 @@ describe('TasksService', () => {
   });
 
   describe('create', () => {
-    it('throws NotFoundException when the project does not exist', async () => {
-      prisma.project.findUnique.mockResolvedValue(null);
-
-      await expect(
-        service.create('user-1', 'proj-1', { title: 'Task' }),
-      ).rejects.toBeInstanceOf(NotFoundException);
-    });
-
-    it('throws NotFoundException when the caller is not a workspace member', async () => {
-      prisma.project.findUnique.mockResolvedValue({ id: 'proj-1', workspaceId: 'ws-1' });
+    it('rejects an assignee who is not a workspace member', async () => {
       prisma.workspaceMember.findUnique.mockResolvedValue(null);
 
       await expect(
-        service.create('user-1', 'proj-1', { title: 'Task' }),
-      ).rejects.toBeInstanceOf(NotFoundException);
-    });
-
-    it('rejects a VIEWER from creating a task', async () => {
-      prisma.project.findUnique.mockResolvedValue({ id: 'proj-1', workspaceId: 'ws-1' });
-      prisma.workspaceMember.findUnique.mockResolvedValueOnce({
-        role: WorkspaceRole.VIEWER,
-      });
-
-      await expect(
-        service.create('user-1', 'proj-1', { title: 'Task' }),
-      ).rejects.toBeInstanceOf(ForbiddenException);
-    });
-
-    it('rejects an assignee who is not a workspace member', async () => {
-      prisma.project.findUnique.mockResolvedValue({ id: 'proj-1', workspaceId: 'ws-1' });
-      prisma.workspaceMember.findUnique
-        .mockResolvedValueOnce({ role: WorkspaceRole.MEMBER })
-        .mockResolvedValueOnce(null);
-
-      await expect(
-        service.create('user-1', 'proj-1', { title: 'Task', assigneeId: 'user-2' }),
+        service.create('user-1', 'proj-1', 'ws-1', {
+          title: 'Task',
+          assigneeId: 'user-2',
+        }),
       ).rejects.toBeInstanceOf(BadRequestException);
     });
 
     it('creates the task with the caller as reporter', async () => {
-      prisma.project.findUnique.mockResolvedValue({ id: 'proj-1', workspaceId: 'ws-1' });
-      prisma.workspaceMember.findUnique.mockResolvedValue({ role: WorkspaceRole.MEMBER });
       prisma.task.create.mockResolvedValue({ id: 'task-1' });
 
-      await service.create('user-1', 'proj-1', { title: 'Task' });
+      await service.create('user-1', 'proj-1', 'ws-1', { title: 'Task' });
 
       const args = prisma.task.create.mock.calls[0][0];
       expect(args.data.reporterId).toBe('user-1');
@@ -99,34 +62,25 @@ describe('TasksService', () => {
   });
 
   describe('update - status transitions', () => {
-    const baseTask = {
-      id: 'task-1',
-      projectId: 'proj-1',
-      status: TaskStatus.TODO,
-      project: { id: 'proj-1', workspaceId: 'ws-1' },
-    };
+    const baseTask = { id: 'task-1', projectId: 'proj-1', status: TaskStatus.TODO };
 
     it('allows the next legal transition', async () => {
       prisma.task.findUnique.mockResolvedValue(baseTask);
-      prisma.workspaceMember.findUnique.mockResolvedValue({ role: WorkspaceRole.MEMBER });
       prisma.task.update.mockResolvedValue({
         ...baseTask,
         status: TaskStatus.IN_PROGRESS,
       });
 
-      await service.update('user-1', 'proj-1', 'task-1', {
-        status: TaskStatus.IN_PROGRESS,
-      });
+      await service.update('task-1', 'ws-1', { status: TaskStatus.IN_PROGRESS });
 
       expect(prisma.task.update).toHaveBeenCalled();
     });
 
     it('rejects skipping a step in the workflow', async () => {
       prisma.task.findUnique.mockResolvedValue(baseTask);
-      prisma.workspaceMember.findUnique.mockResolvedValue({ role: WorkspaceRole.MEMBER });
 
       await expect(
-        service.update('user-1', 'proj-1', 'task-1', { status: TaskStatus.DONE }),
+        service.update('task-1', 'ws-1', { status: TaskStatus.DONE }),
       ).rejects.toBeInstanceOf(BadRequestException);
       expect(prisma.task.update).not.toHaveBeenCalled();
     });
@@ -136,61 +90,34 @@ describe('TasksService', () => {
         ...baseTask,
         status: TaskStatus.REVIEW,
       });
-      prisma.workspaceMember.findUnique.mockResolvedValue({ role: WorkspaceRole.MEMBER });
 
       await expect(
-        service.update('user-1', 'proj-1', 'task-1', { status: TaskStatus.IN_PROGRESS }),
+        service.update('task-1', 'ws-1', { status: TaskStatus.IN_PROGRESS }),
       ).rejects.toBeInstanceOf(BadRequestException);
     });
 
     it('rejects any transition out of the terminal DONE status', async () => {
       prisma.task.findUnique.mockResolvedValue({ ...baseTask, status: TaskStatus.DONE });
-      prisma.workspaceMember.findUnique.mockResolvedValue({ role: WorkspaceRole.MEMBER });
 
       await expect(
-        service.update('user-1', 'proj-1', 'task-1', { status: TaskStatus.TODO }),
+        service.update('task-1', 'ws-1', { status: TaskStatus.TODO }),
       ).rejects.toBeInstanceOf(BadRequestException);
     });
   });
 
-  describe('remove', () => {
-    it('rejects a MEMBER from deleting a task', async () => {
-      prisma.task.findUnique.mockResolvedValue({
-        id: 'task-1',
-        projectId: 'proj-1',
-        project: { workspaceId: 'ws-1' },
-      });
-      prisma.workspaceMember.findUnique.mockResolvedValue({ role: WorkspaceRole.MEMBER });
+  describe('findOne / remove', () => {
+    it('throws NotFoundException when the task does not exist', async () => {
+      prisma.task.findUnique.mockResolvedValue(null);
 
-      await expect(service.remove('user-1', 'proj-1', 'task-1')).rejects.toBeInstanceOf(
-        ForbiddenException,
-      );
-      expect(prisma.task.delete).not.toHaveBeenCalled();
+      await expect(service.findOne('task-1')).rejects.toBeInstanceOf(NotFoundException);
     });
 
-    it('allows an ADMIN to delete a task', async () => {
-      prisma.task.findUnique.mockResolvedValue({
-        id: 'task-1',
-        projectId: 'proj-1',
-        project: { workspaceId: 'ws-1' },
-      });
-      prisma.workspaceMember.findUnique.mockResolvedValue({ role: WorkspaceRole.ADMIN });
+    it('deletes the task when it exists', async () => {
+      prisma.task.findUnique.mockResolvedValue({ id: 'task-1' });
 
-      await service.remove('user-1', 'proj-1', 'task-1');
+      await service.remove('task-1');
 
       expect(prisma.task.delete).toHaveBeenCalledWith({ where: { id: 'task-1' } });
-    });
-
-    it('throws NotFoundException for a task outside the given project', async () => {
-      prisma.task.findUnique.mockResolvedValue({
-        id: 'task-1',
-        projectId: 'proj-2',
-        project: { workspaceId: 'ws-1' },
-      });
-
-      await expect(service.remove('user-1', 'proj-1', 'task-1')).rejects.toBeInstanceOf(
-        NotFoundException,
-      );
     });
   });
 });

@@ -23,6 +23,7 @@ import { WorkspaceRole } from '../common/enums/workspace-role.enum';
 
 @ApiTags('workspaces')
 @ApiBearerAuth()
+@UseGuards(RolesGuard)
 @Controller('workspaces')
 export class WorkspacesController {
   constructor(private readonly workspacesService: WorkspacesService) {}
@@ -40,16 +41,13 @@ export class WorkspacesController {
   }
 
   @Get(':workspaceId')
+  @Roles(WorkspaceRole.VIEWER)
   @ApiOperation({ summary: 'Get a workspace by id' })
-  findOne(
-    @CurrentUser('userId') userId: string,
-    @Param('workspaceId', ParseUUIDPipe) workspaceId: string,
-  ) {
-    return this.workspacesService.findOne(userId, workspaceId);
+  findOne(@Param('workspaceId', ParseUUIDPipe) workspaceId: string) {
+    return this.workspacesService.findOne(workspaceId);
   }
 
   @Patch(':workspaceId')
-  @UseGuards(RolesGuard)
   @Roles(WorkspaceRole.ADMIN)
   @ApiOperation({ summary: 'Update workspace details (ADMIN or OWNER only)' })
   update(
@@ -60,7 +58,6 @@ export class WorkspacesController {
   }
 
   @Post(':workspaceId/archive')
-  @UseGuards(RolesGuard)
   @Roles(WorkspaceRole.OWNER)
   @ApiOperation({ summary: 'Archive a workspace (OWNER only)' })
   archive(@Param('workspaceId', ParseUUIDPipe) workspaceId: string) {
@@ -68,7 +65,6 @@ export class WorkspacesController {
   }
 
   @Delete(':workspaceId')
-  @UseGuards(RolesGuard)
   @Roles(WorkspaceRole.OWNER)
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Permanently delete a workspace (OWNER only)' })
@@ -77,7 +73,6 @@ export class WorkspacesController {
   }
 
   @Post(':workspaceId/members')
-  @UseGuards(RolesGuard)
   @Roles(WorkspaceRole.ADMIN)
   @ApiOperation({ summary: 'Invite or update a workspace member (ADMIN or OWNER only)' })
   inviteMember(

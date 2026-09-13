@@ -1,62 +1,19 @@
-import {
-  BadRequestException,
-  ForbiddenException,
-  Injectable,
-  NotFoundException,
-} from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateTaskDto } from './dto/create-task.dto';
 import { UpdateTaskDto } from './dto/update-task.dto';
 import { QueryTasksDto } from './dto/query-tasks.dto';
-import { ROLE_HIERARCHY, WorkspaceRole } from '../common/enums/workspace-role.enum';
 import { TASK_STATUS_TRANSITIONS, TaskStatus } from '../common/enums/task-status.enum';
 
 @Injectable()
 export class TasksService {
   constructor(private readonly prisma: PrismaService) {}
 
-  // Tasks don't carry a workspaceId of their own (see PROJECT_PLAN.md - RBAC
-  // hardening generalizes this resolution into a shared guard later). Until then,
-  // every entry point resolves membership by joining through project -> workspace,
-  // and 404s (not 403) on a missing membership so cross-workspace ids don't leak.
-  private async requireProjectMembership(projectId: string, userId: string) {
-    const project = await this.prisma.project.findUnique({ where: { id: projectId } });
-    if (!project) {
-      throw new NotFoundException('Project not found.');
-    }
-    const membership = await this.prisma.workspaceMember.findUnique({
-      where: { workspaceId_userId: { workspaceId: project.workspaceId, userId } },
-    });
-    if (!membership) {
-      throw new NotFoundException('Project not found.');
-    }
-    return { project, membership };
-  }
-
-  private async requireTaskMembership(projectId: string, taskId: string, userId: string) {
-    const task = await this.prisma.task.findUnique({
-      where: { id: taskId },
-      include: { project: true },
-    });
-    if (!task || task.projectId !== projectId) {
-      throw new NotFoundException('Task not found.');
-    }
-    const membership = await this.prisma.workspaceMember.findUnique({
-      where: { workspaceId_userId: { workspaceId: task.project.workspaceId, userId } },
-    });
-    if (!membership) {
-      throw new NotFoundException('Task not found.');
-    }
-    return { task, membership };
-  }
-
-  private requireMinRole(role: WorkspaceRole, minimum: WorkspaceRole) {
-    if (ROLE_HIERARCHY[role] < ROLE_HIERARCHY[minimum]) {
-      throw new ForbiddenException('Your workspace role does not permit this action.');
-    }
-  }
-
+  // Workspace membership/role is already enforced by RolesGuard before this runs
+  // (see tasks.controller.ts, which resolves :projectId/:taskId via
+  // WorkspaceScopeResolver). This only validates that a given assignee actually
+  // belongs to the same workspace as the task.
   private async requireWorkspaceMember(workspaceId: string, assigneeId: string) {
     const membership = await this.prisma.workspaceMember.findUnique({
       where: { workspaceId_userId: { workspaceId, userId: assigneeId } },
@@ -66,15 +23,14 @@ export class TasksService {
     }
   }
 
-  async create(userId: string, projectId: string, dto: CreateTaskDto) {
-    const { project, membership } = await this.requireProjectMembership(
-      projectId,
-      userId,
-    );
-    this.requireMinRole(membership.role as WorkspaceRole, WorkspaceRole.MEMBER);
-
+  async create(
+    userId: string,
+    projectId: string,
+    workspaceId: string,
+    dto: CreateTaskDto,
+  ) {
     if (dto.assigneeId) {
-      await this.requireWorkspaceMember(project.workspaceId, dto.assigneeId);
+      await this.requireWorkspaceMember(workspaceId, dto.assigneeId);
     }
 
     return this.prisma.task.create({
@@ -91,9 +47,7 @@ export class TasksService {
     });
   }
 
-  async findAll(userId: string, projectId: string, query: QueryTasksDto) {
-    await this.requireProjectMembership(projectId, userId);
-
+  async findAll(projectId: string, query: QueryTasksDto) {
     const page = query.page ?? 1;
     const limit = query.limit ?? 20;
     const sort = query.sort ?? '-createdAt';
@@ -131,21 +85,19 @@ export class TasksService {
     return { items, total, page, limit, totalPages: Math.ceil(total / limit) };
   }
 
-  async findOne(userId: string, projectId: string, taskId: string) {
-    const { task } = await this.requireTaskMembership(projectId, taskId, userId);
+  async findOne(taskId: string) {
+    const task = await this.prisma.task.findUnique({ where: { id: taskId } });
+    if (!task) {
+      throw new NotFoundException('Task not found.');
+    }
     return task;
   }
 
-  async update(userId: string, projectId: string, taskId: string, dto: UpdateTaskDto) {
-    const { task, membership } = await this.requireTaskMembership(
-      projectId,
-      taskId,
-      userId,
-    );
-    this.requireMinRole(membership.role as WorkspaceRole, WorkspaceRole.MEMBER);
+  async update(taskId: string, workspaceId: string, dto: UpdateTaskDto) {
+    const task = await this.findOne(taskId);
 
     if (dto.assigneeId) {
-      await this.requireWorkspaceMember(task.project.workspaceId, dto.assigneeId);
+      await this.requireWorkspaceMember(workspaceId, dto.assigneeId);
     }
 
     if (dto.status && dto.status !== task.status) {
@@ -171,9 +123,8 @@ export class TasksService {
     });
   }
 
-  async remove(userId: string, projectId: string, taskId: string) {
-    const { membership } = await this.requireTaskMembership(projectId, taskId, userId);
-    this.requireMinRole(membership.role as WorkspaceRole, WorkspaceRole.ADMIN);
+  async remove(taskId: string) {
+    await this.findOne(taskId);
     await this.prisma.task.delete({ where: { id: taskId } });
   }
 }

@@ -61,7 +61,9 @@ export class WorkspacesService {
     });
   }
 
-  async findOne(userId: string, workspaceId: string) {
+  // Called after RolesGuard has already verified the caller's membership, so
+  // this only needs to check the workspace itself still exists.
+  async findOne(workspaceId: string) {
     const workspace = await this.prisma.workspace.findUnique({
       where: { id: workspaceId },
       include: {
@@ -72,10 +74,7 @@ export class WorkspacesService {
         },
       },
     });
-    if (
-      !workspace ||
-      !workspace.members.some((m: { userId: string }) => m.userId === userId)
-    ) {
+    if (!workspace) {
       throw new NotFoundException('Workspace not found.');
     }
     return workspace;

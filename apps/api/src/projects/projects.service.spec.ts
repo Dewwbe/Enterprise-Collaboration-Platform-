@@ -6,7 +6,6 @@ import { PrismaService } from '../prisma/prisma.service';
 describe('ProjectsService', () => {
   let service: ProjectsService;
   let prisma: {
-    workspaceMember: { findUnique: jest.Mock };
     project: {
       findUnique: jest.Mock;
       findMany: jest.Mock;
@@ -18,7 +17,6 @@ describe('ProjectsService', () => {
 
   beforeEach(async () => {
     prisma = {
-      workspaceMember: { findUnique: jest.fn() },
       project: {
         findUnique: jest.fn(),
         findMany: jest.fn(),
@@ -36,19 +34,10 @@ describe('ProjectsService', () => {
   });
 
   describe('create', () => {
-    it('rejects a caller who is not a workspace member', async () => {
-      prisma.workspaceMember.findUnique.mockResolvedValue(null);
-
-      await expect(
-        service.create('user-1', 'ws-1', { name: 'New Project' }),
-      ).rejects.toBeInstanceOf(NotFoundException);
-    });
-
     it('creates the project scoped to the workspace', async () => {
-      prisma.workspaceMember.findUnique.mockResolvedValue({ role: 'MEMBER' });
       prisma.project.create.mockResolvedValue({ id: 'proj-1' });
 
-      await service.create('user-1', 'ws-1', { name: 'New Project', description: 'x' });
+      await service.create('ws-1', { name: 'New Project', description: 'x' });
 
       expect(prisma.project.create).toHaveBeenCalledWith({
         data: { name: 'New Project', description: 'x', workspaceId: 'ws-1' },
@@ -58,30 +47,27 @@ describe('ProjectsService', () => {
 
   describe('findAll', () => {
     it('excludes archived projects by default', async () => {
-      prisma.workspaceMember.findUnique.mockResolvedValue({ role: 'VIEWER' });
       prisma.project.findMany.mockResolvedValue([]);
 
-      await service.findAll('user-1', 'ws-1', {});
+      await service.findAll('ws-1', {});
 
       const args = prisma.project.findMany.mock.calls[0][0];
       expect(args.where.isArchived).toBe(false);
     });
 
     it('includes archived projects when requested', async () => {
-      prisma.workspaceMember.findUnique.mockResolvedValue({ role: 'VIEWER' });
       prisma.project.findMany.mockResolvedValue([]);
 
-      await service.findAll('user-1', 'ws-1', { includeArchived: true });
+      await service.findAll('ws-1', { includeArchived: true });
 
       const args = prisma.project.findMany.mock.calls[0][0];
       expect(args.where.isArchived).toBeUndefined();
     });
 
     it('applies a case-insensitive name search filter', async () => {
-      prisma.workspaceMember.findUnique.mockResolvedValue({ role: 'VIEWER' });
       prisma.project.findMany.mockResolvedValue([]);
 
-      await service.findAll('user-1', 'ws-1', { search: 'launch' });
+      await service.findAll('ws-1', { search: 'launch' });
 
       const args = prisma.project.findMany.mock.calls[0][0];
       expect(args.where.name).toEqual({ contains: 'launch', mode: 'insensitive' });
@@ -90,19 +76,17 @@ describe('ProjectsService', () => {
 
   describe('findOne', () => {
     it('throws NotFoundException when the project belongs to a different workspace', async () => {
-      prisma.workspaceMember.findUnique.mockResolvedValue({ role: 'MEMBER' });
       prisma.project.findUnique.mockResolvedValue({ id: 'proj-1', workspaceId: 'ws-2' });
 
-      await expect(service.findOne('user-1', 'ws-1', 'proj-1')).rejects.toBeInstanceOf(
+      await expect(service.findOne('ws-1', 'proj-1')).rejects.toBeInstanceOf(
         NotFoundException,
       );
     });
 
     it('returns the project when it belongs to the workspace', async () => {
-      prisma.workspaceMember.findUnique.mockResolvedValue({ role: 'MEMBER' });
       prisma.project.findUnique.mockResolvedValue({ id: 'proj-1', workspaceId: 'ws-1' });
 
-      const result = await service.findOne('user-1', 'ws-1', 'proj-1');
+      const result = await service.findOne('ws-1', 'proj-1');
 
       expect(result).toEqual({ id: 'proj-1', workspaceId: 'ws-1' });
     });

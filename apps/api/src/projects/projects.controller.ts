@@ -17,51 +17,48 @@ import { ProjectsService } from './projects.service';
 import { CreateProjectDto } from './dto/create-project.dto';
 import { UpdateProjectDto } from './dto/update-project.dto';
 import { QueryProjectsDto } from './dto/query-projects.dto';
-import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { WorkspaceRole } from '../common/enums/workspace-role.enum';
 
 @ApiTags('projects')
 @ApiBearerAuth()
+@UseGuards(RolesGuard)
 @Controller('workspaces/:workspaceId/projects')
 export class ProjectsController {
   constructor(private readonly projectsService: ProjectsService) {}
 
   @Post()
-  @UseGuards(RolesGuard)
   @Roles(WorkspaceRole.MEMBER)
   @ApiOperation({ summary: 'Create a project in a workspace (MEMBER or above)' })
   create(
-    @CurrentUser('userId') userId: string,
     @Param('workspaceId', ParseUUIDPipe) workspaceId: string,
     @Body() dto: CreateProjectDto,
   ) {
-    return this.projectsService.create(userId, workspaceId, dto);
+    return this.projectsService.create(workspaceId, dto);
   }
 
   @Get()
+  @Roles(WorkspaceRole.VIEWER)
   @ApiOperation({ summary: 'List projects in a workspace' })
   findAll(
-    @CurrentUser('userId') userId: string,
     @Param('workspaceId', ParseUUIDPipe) workspaceId: string,
     @Query() query: QueryProjectsDto,
   ) {
-    return this.projectsService.findAll(userId, workspaceId, query);
+    return this.projectsService.findAll(workspaceId, query);
   }
 
   @Get(':projectId')
+  @Roles(WorkspaceRole.VIEWER)
   @ApiOperation({ summary: 'Get a project by id' })
   findOne(
-    @CurrentUser('userId') userId: string,
     @Param('workspaceId', ParseUUIDPipe) workspaceId: string,
     @Param('projectId', ParseUUIDPipe) projectId: string,
   ) {
-    return this.projectsService.findOne(userId, workspaceId, projectId);
+    return this.projectsService.findOne(workspaceId, projectId);
   }
 
   @Patch(':projectId')
-  @UseGuards(RolesGuard)
   @Roles(WorkspaceRole.ADMIN)
   @ApiOperation({ summary: 'Update project details (ADMIN or OWNER only)' })
   update(
@@ -73,7 +70,6 @@ export class ProjectsController {
   }
 
   @Post(':projectId/archive')
-  @UseGuards(RolesGuard)
   @Roles(WorkspaceRole.ADMIN)
   @ApiOperation({ summary: 'Archive a project (ADMIN or OWNER only)' })
   archive(
@@ -84,7 +80,6 @@ export class ProjectsController {
   }
 
   @Post(':projectId/restore')
-  @UseGuards(RolesGuard)
   @Roles(WorkspaceRole.ADMIN)
   @ApiOperation({ summary: 'Restore an archived project (ADMIN or OWNER only)' })
   restore(
@@ -95,7 +90,6 @@ export class ProjectsController {
   }
 
   @Delete(':projectId')
-  @UseGuards(RolesGuard)
   @Roles(WorkspaceRole.OWNER)
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Permanently delete a project (OWNER only)' })

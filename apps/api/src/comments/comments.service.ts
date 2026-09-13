@@ -2,31 +2,14 @@ import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/commo
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateCommentDto } from './dto/create-comment.dto';
 import { UpdateCommentDto } from './dto/update-comment.dto';
-import { ROLE_HIERARCHY, WorkspaceRole } from '../common/enums/workspace-role.enum';
 
 @Injectable()
 export class CommentsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  // Same join-through-project pattern as TasksService (task has no workspaceId of
-  // its own) - see the note there on why this isn't using RolesGuard yet.
-  private async requireTaskMembership(taskId: string, userId: string) {
-    const task = await this.prisma.task.findUnique({
-      where: { id: taskId },
-      include: { project: true },
-    });
-    if (!task) {
-      throw new NotFoundException('Task not found.');
-    }
-    const membership = await this.prisma.workspaceMember.findUnique({
-      where: { workspaceId_userId: { workspaceId: task.project.workspaceId, userId } },
-    });
-    if (!membership) {
-      throw new NotFoundException('Task not found.');
-    }
-    return { task, membership };
-  }
-
+  // Workspace membership/role is already enforced by RolesGuard before this runs
+  // (see comments.controller.ts). This only enforces the "own comments only"
+  // rule, which is per-resource and not something a role check can express.
   private async requireOwnComment(taskId: string, commentId: string, userId: string) {
     const comment = await this.prisma.comment.findUnique({ where: { id: commentId } });
     if (!comment || comment.taskId !== taskId) {
@@ -39,21 +22,12 @@ export class CommentsService {
   }
 
   async create(userId: string, taskId: string, dto: CreateCommentDto) {
-    const { membership } = await this.requireTaskMembership(taskId, userId);
-    if (
-      ROLE_HIERARCHY[membership.role as WorkspaceRole] <
-      ROLE_HIERARCHY[WorkspaceRole.MEMBER]
-    ) {
-      throw new ForbiddenException('Your workspace role does not permit this action.');
-    }
-
     return this.prisma.comment.create({
       data: { taskId, authorId: userId, body: dto.body },
     });
   }
 
-  async findAll(userId: string, taskId: string) {
-    await this.requireTaskMembership(taskId, userId);
+  async findAll(taskId: string) {
     return this.prisma.comment.findMany({
       where: { taskId },
       orderBy: { createdAt: 'asc' },
@@ -61,7 +35,6 @@ export class CommentsService {
   }
 
   async update(userId: string, taskId: string, commentId: string, dto: UpdateCommentDto) {
-    await this.requireTaskMembership(taskId, userId);
     await this.requireOwnComment(taskId, commentId, userId);
     return this.prisma.comment.update({
       where: { id: commentId },
@@ -70,7 +43,6 @@ export class CommentsService {
   }
 
   async remove(userId: string, taskId: string, commentId: string) {
-    await this.requireTaskMembership(taskId, userId);
     await this.requireOwnComment(taskId, commentId, userId);
     await this.prisma.comment.delete({ where: { id: commentId } });
   }
