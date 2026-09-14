@@ -48,6 +48,19 @@ export class WorkspacesController {
     return this.workspacesService.findOne(userId, workspaceId);
   }
 
+  @Get(':workspaceId/stats')
+  @ApiOperation({
+    summary: 'Get workspace statistics (member/project counts, tasks by status)',
+    description:
+      'Cached for 60s; invalidated on project archive/restore/create/delete and task create/delete/status-change within this workspace.',
+  })
+  getStats(
+    @CurrentUser('userId') userId: string,
+    @Param('workspaceId', ParseUUIDPipe) workspaceId: string,
+  ) {
+    return this.workspacesService.getStats(userId, workspaceId);
+  }
+
   @Patch(':workspaceId')
   @UseGuards(RolesGuard)
   @Roles(WorkspaceRole.ADMIN)

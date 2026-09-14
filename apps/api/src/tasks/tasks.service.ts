@@ -18,12 +18,15 @@ import {
   TASK_COMPLETED_EVENT,
   TaskCompletedEvent,
 } from '../common/events';
+import { CacheService } from '../redis/cache.service';
+import { workspaceStatsCacheKey } from '../common/cache-keys';
 
 @Injectable()
 export class TasksService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly eventEmitter: EventEmitter2,
+    private readonly cache: CacheService,
   ) {}
 
   // Tasks don't carry a workspaceId of their own (see PROJECT_PLAN.md - RBAC
@@ -112,6 +115,8 @@ export class TasksService {
         ),
       );
     }
+
+    await this.cache.del(workspaceStatsCacheKey(project.workspaceId));
 
     return task;
   }
@@ -221,12 +226,21 @@ export class TasksService {
       );
     }
 
+    if (dto.status && dto.status !== task.status) {
+      await this.cache.del(workspaceStatsCacheKey(task.project.workspaceId));
+    }
+
     return updated;
   }
 
   async remove(userId: string, projectId: string, taskId: string) {
-    const { membership } = await this.requireTaskMembership(projectId, taskId, userId);
+    const { task, membership } = await this.requireTaskMembership(
+      projectId,
+      taskId,
+      userId,
+    );
     this.requireMinRole(membership.role as WorkspaceRole, WorkspaceRole.ADMIN);
     await this.prisma.task.delete({ where: { id: taskId } });
+    await this.cache.del(workspaceStatsCacheKey(task.project.workspaceId));
   }
 }
