@@ -20,6 +20,7 @@ import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { WorkspaceRole } from '../common/enums/workspace-role.enum';
+import { AuditLog } from '../common/decorators/audit-log.decorator';
 
 @ApiTags('workspaces')
 @ApiBearerAuth()
@@ -64,6 +65,7 @@ export class WorkspacesController {
   @Patch(':workspaceId')
   @UseGuards(RolesGuard)
   @Roles(WorkspaceRole.ADMIN)
+  @AuditLog('workspace.update', 'Workspace', 'workspaceId')
   @ApiOperation({ summary: 'Update workspace details (ADMIN or OWNER only)' })
   update(
     @Param('workspaceId', ParseUUIDPipe) workspaceId: string,
@@ -75,6 +77,7 @@ export class WorkspacesController {
   @Post(':workspaceId/archive')
   @UseGuards(RolesGuard)
   @Roles(WorkspaceRole.OWNER)
+  @AuditLog('workspace.archive', 'Workspace', 'workspaceId')
   @ApiOperation({ summary: 'Archive a workspace (OWNER only)' })
   archive(@Param('workspaceId', ParseUUIDPipe) workspaceId: string) {
     return this.workspacesService.archive(workspaceId);
@@ -84,6 +87,7 @@ export class WorkspacesController {
   @UseGuards(RolesGuard)
   @Roles(WorkspaceRole.OWNER)
   @HttpCode(HttpStatus.NO_CONTENT)
+  @AuditLog('workspace.delete', 'Workspace', 'workspaceId')
   @ApiOperation({ summary: 'Permanently delete a workspace (OWNER only)' })
   remove(@Param('workspaceId', ParseUUIDPipe) workspaceId: string) {
     return this.workspacesService.remove(workspaceId);
@@ -92,6 +96,7 @@ export class WorkspacesController {
   @Post(':workspaceId/members')
   @UseGuards(RolesGuard)
   @Roles(WorkspaceRole.ADMIN)
+  @AuditLog('workspace.inviteMember', 'WorkspaceMember')
   @ApiOperation({ summary: 'Invite or update a workspace member (ADMIN or OWNER only)' })
   inviteMember(
     @CurrentUser('userId') userId: string,

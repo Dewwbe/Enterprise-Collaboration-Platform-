@@ -15,6 +15,7 @@ import { CommentsService } from './comments.service';
 import { CreateCommentDto } from './dto/create-comment.dto';
 import { UpdateCommentDto } from './dto/update-comment.dto';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
+import { AuditLog } from '../common/decorators/audit-log.decorator';
 
 @ApiTags('comments')
 @ApiBearerAuth()
@@ -23,6 +24,7 @@ export class CommentsController {
   constructor(private readonly commentsService: CommentsService) {}
 
   @Post()
+  @AuditLog('comment.create', 'Comment')
   @ApiOperation({ summary: 'Add a comment to a task (MEMBER or above)' })
   create(
     @CurrentUser('userId') userId: string,
@@ -42,6 +44,7 @@ export class CommentsController {
   }
 
   @Patch(':commentId')
+  @AuditLog('comment.update', 'Comment', 'commentId')
   @ApiOperation({ summary: 'Edit your own comment' })
   update(
     @CurrentUser('userId') userId: string,
@@ -54,6 +57,7 @@ export class CommentsController {
 
   @Delete(':commentId')
   @HttpCode(HttpStatus.NO_CONTENT)
+  @AuditLog('comment.delete', 'Comment', 'commentId')
   @ApiOperation({ summary: 'Delete your own comment' })
   remove(
     @CurrentUser('userId') userId: string,
