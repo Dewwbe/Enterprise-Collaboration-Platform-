@@ -1,8 +1,10 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { ConflictException, ForbiddenException, NotFoundException } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { OrganizationsService } from './organizations.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { WorkspaceRole } from '../common/enums/workspace-role.enum';
+import { USER_INVITED_EVENT } from '../common/events';
 
 describe('OrganizationsService', () => {
   let service: OrganizationsService;
@@ -17,6 +19,7 @@ describe('OrganizationsService', () => {
     organizationMember: { findUnique: jest.Mock; upsert: jest.Mock };
     user: { findUnique: jest.Mock };
   };
+  let eventEmitter: { emit: jest.Mock };
 
   beforeEach(async () => {
     prisma = {
@@ -30,9 +33,14 @@ describe('OrganizationsService', () => {
       organizationMember: { findUnique: jest.fn(), upsert: jest.fn() },
       user: { findUnique: jest.fn() },
     };
+    eventEmitter = { emit: jest.fn() };
 
     const module: TestingModule = await Test.createTestingModule({
-      providers: [OrganizationsService, { provide: PrismaService, useValue: prisma }],
+      providers: [
+        OrganizationsService,
+        { provide: PrismaService, useValue: prisma },
+        { provide: EventEmitter2, useValue: eventEmitter },
+      ],
     }).compile();
 
     service = module.get<OrganizationsService>(OrganizationsService);
@@ -89,6 +97,45 @@ describe('OrganizationsService', () => {
       await expect(
         service.update('user-1', 'org-1', { name: 'New name' }),
       ).rejects.toBeInstanceOf(NotFoundException);
+    });
+  });
+
+  describe('inviteMember', () => {
+    it('emits UserInvitedEvent scoped to the organization', async () => {
+      prisma.organizationMember.findUnique.mockResolvedValue({
+        role: WorkspaceRole.OWNER,
+      });
+      prisma.organization.findUnique.mockResolvedValue({ name: 'EFutures' });
+      prisma.user.findUnique.mockResolvedValue({ id: 'user-2' });
+      prisma.organizationMember.upsert.mockResolvedValue({
+        id: 'mem-1',
+        role: WorkspaceRole.MEMBER,
+      });
+
+      await service.inviteMember('user-1', 'org-1', 'user-2', WorkspaceRole.MEMBER);
+
+      expect(eventEmitter.emit).toHaveBeenCalledWith(
+        USER_INVITED_EVENT,
+        expect.objectContaining({
+          scope: 'organization',
+          scopeId: 'org-1',
+          invitedUserId: 'user-2',
+          invitedById: 'user-1',
+        }),
+      );
+    });
+
+    it('throws NotFoundException when the invitee does not exist', async () => {
+      prisma.organizationMember.findUnique.mockResolvedValue({
+        role: WorkspaceRole.OWNER,
+      });
+      prisma.organization.findUnique.mockResolvedValue({ name: 'EFutures' });
+      prisma.user.findUnique.mockResolvedValue(null);
+
+      await expect(
+        service.inviteMember('user-1', 'org-1', 'user-2', WorkspaceRole.MEMBER),
+      ).rejects.toBeInstanceOf(NotFoundException);
+      expect(eventEmitter.emit).not.toHaveBeenCalled();
     });
   });
 

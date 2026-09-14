@@ -4,14 +4,19 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateWorkspaceDto } from './dto/create-workspace.dto';
 import { UpdateWorkspaceDto } from './dto/update-workspace.dto';
 import { WorkspaceRole } from '../common/enums/workspace-role.enum';
+import { USER_INVITED_EVENT, UserInvitedEvent } from '../common/events';
 
 @Injectable()
 export class WorkspacesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly eventEmitter: EventEmitter2,
+  ) {}
 
   async create(userId: string, dto: CreateWorkspaceDto) {
     const orgMembership = await this.prisma.organizationMember.findUnique({
@@ -98,16 +103,36 @@ export class WorkspacesService {
     await this.prisma.workspace.delete({ where: { id: workspaceId } });
   }
 
-  async inviteMember(workspaceId: string, inviteeUserId: string, role: WorkspaceRole) {
+  async inviteMember(
+    workspaceId: string,
+    invitedById: string,
+    inviteeUserId: string,
+    role: WorkspaceRole,
+  ) {
     const invitee = await this.prisma.user.findUnique({ where: { id: inviteeUserId } });
     if (!invitee) {
       throw new NotFoundException('Invited user does not exist.');
     }
 
-    return this.prisma.workspaceMember.upsert({
+    const { workspace, ...membership } = await this.prisma.workspaceMember.upsert({
       where: { workspaceId_userId: { workspaceId, userId: inviteeUserId } },
       update: { role },
       create: { workspaceId, userId: inviteeUserId, role, joinedAt: new Date() },
+      include: { workspace: { select: { name: true } } },
     });
+
+    this.eventEmitter.emit(
+      USER_INVITED_EVENT,
+      new UserInvitedEvent(
+        'workspace',
+        workspaceId,
+        workspace.name,
+        inviteeUserId,
+        invitedById,
+        role,
+      ),
+    );
+
+    return membership;
   }
 }

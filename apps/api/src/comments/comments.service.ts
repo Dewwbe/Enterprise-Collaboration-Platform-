@@ -1,12 +1,17 @@
 import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateCommentDto } from './dto/create-comment.dto';
 import { UpdateCommentDto } from './dto/update-comment.dto';
 import { ROLE_HIERARCHY, WorkspaceRole } from '../common/enums/workspace-role.enum';
+import { COMMENT_ADDED_EVENT, CommentAddedEvent } from '../common/events';
 
 @Injectable()
 export class CommentsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly eventEmitter: EventEmitter2,
+  ) {}
 
   // Same join-through-project pattern as TasksService (task has no workspaceId of
   // its own) - see the note there on why this isn't using RolesGuard yet.
@@ -39,7 +44,7 @@ export class CommentsService {
   }
 
   async create(userId: string, taskId: string, dto: CreateCommentDto) {
-    const { membership } = await this.requireTaskMembership(taskId, userId);
+    const { task, membership } = await this.requireTaskMembership(taskId, userId);
     if (
       ROLE_HIERARCHY[membership.role as WorkspaceRole] <
       ROLE_HIERARCHY[WorkspaceRole.MEMBER]
@@ -47,9 +52,21 @@ export class CommentsService {
       throw new ForbiddenException('Your workspace role does not permit this action.');
     }
 
-    return this.prisma.comment.create({
+    const comment = await this.prisma.comment.create({
       data: { taskId, authorId: userId, body: dto.body },
     });
+
+    const recipientIds = [...new Set([task.assigneeId, task.reporterId])].filter(
+      (id): id is string => !!id && id !== userId,
+    );
+    if (recipientIds.length > 0) {
+      this.eventEmitter.emit(
+        COMMENT_ADDED_EVENT,
+        new CommentAddedEvent(comment.id, taskId, task.title, userId, recipientIds),
+      );
+    }
+
+    return comment;
   }
 
   async findAll(userId: string, taskId: string) {

@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
+import { EventEmitterModule } from '@nestjs/event-emitter';
 import configuration from './config/configuration';
 import { PrismaModule } from './prisma/prisma.module';
 import { AuthModule } from './auth/auth.module';
@@ -33,6 +34,10 @@ import { TransformInterceptor } from './common/interceptors/transform.intercepto
         ],
       }),
     }),
+    // Domain event bus (Section 11): services emit typed events instead of
+    // calling notification logic directly; listeners (added in later modules)
+    // react asynchronously.
+    EventEmitterModule.forRoot(),
     PrismaModule,
     AuthModule,
     UsersModule,

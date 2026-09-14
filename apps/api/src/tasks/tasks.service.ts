@@ -5,16 +5,26 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateTaskDto } from './dto/create-task.dto';
 import { UpdateTaskDto } from './dto/update-task.dto';
 import { QueryTasksDto } from './dto/query-tasks.dto';
 import { ROLE_HIERARCHY, WorkspaceRole } from '../common/enums/workspace-role.enum';
 import { TASK_STATUS_TRANSITIONS, TaskStatus } from '../common/enums/task-status.enum';
+import {
+  TASK_ASSIGNED_EVENT,
+  TaskAssignedEvent,
+  TASK_COMPLETED_EVENT,
+  TaskCompletedEvent,
+} from '../common/events';
 
 @Injectable()
 export class TasksService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly eventEmitter: EventEmitter2,
+  ) {}
 
   // Tasks don't carry a workspaceId of their own (see PROJECT_PLAN.md - RBAC
   // hardening generalizes this resolution into a shared guard later). Until then,
@@ -77,7 +87,7 @@ export class TasksService {
       await this.requireWorkspaceMember(project.workspaceId, dto.assigneeId);
     }
 
-    return this.prisma.task.create({
+    const task = await this.prisma.task.create({
       data: {
         projectId,
         title: dto.title,
@@ -89,6 +99,21 @@ export class TasksService {
         reporterId: userId,
       },
     });
+
+    if (dto.assigneeId) {
+      this.eventEmitter.emit(
+        TASK_ASSIGNED_EVENT,
+        new TaskAssignedEvent(
+          task.id,
+          task.title,
+          task.projectId,
+          dto.assigneeId,
+          userId,
+        ),
+      );
+    }
+
+    return task;
   }
 
   async findAll(userId: string, projectId: string, query: QueryTasksDto) {
@@ -157,7 +182,7 @@ export class TasksService {
       }
     }
 
-    return this.prisma.task.update({
+    const updated = await this.prisma.task.update({
       where: { id: taskId },
       data: {
         title: dto.title,
@@ -169,6 +194,34 @@ export class TasksService {
         assigneeId: dto.assigneeId === undefined ? undefined : dto.assigneeId,
       },
     });
+
+    if (dto.assigneeId && dto.assigneeId !== task.assigneeId) {
+      this.eventEmitter.emit(
+        TASK_ASSIGNED_EVENT,
+        new TaskAssignedEvent(
+          updated.id,
+          updated.title,
+          updated.projectId,
+          dto.assigneeId,
+          userId,
+        ),
+      );
+    }
+
+    if (dto.status === TaskStatus.DONE && task.status !== TaskStatus.DONE) {
+      this.eventEmitter.emit(
+        TASK_COMPLETED_EVENT,
+        new TaskCompletedEvent(
+          updated.id,
+          updated.title,
+          updated.projectId,
+          task.reporterId,
+          userId,
+        ),
+      );
+    }
+
+    return updated;
   }
 
   async remove(userId: string, projectId: string, taskId: string) {

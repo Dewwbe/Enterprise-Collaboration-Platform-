@@ -4,10 +4,12 @@ import {
   ForbiddenException,
   NotFoundException,
 } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { TasksService } from './tasks.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { WorkspaceRole } from '../common/enums/workspace-role.enum';
 import { TaskStatus } from '../common/enums/task-status.enum';
+import { TASK_ASSIGNED_EVENT, TASK_COMPLETED_EVENT } from '../common/events';
 
 describe('TasksService', () => {
   let service: TasksService;
@@ -23,6 +25,7 @@ describe('TasksService', () => {
       delete: jest.Mock;
     };
   };
+  let eventEmitter: { emit: jest.Mock };
 
   beforeEach(async () => {
     prisma = {
@@ -37,9 +40,14 @@ describe('TasksService', () => {
         delete: jest.fn(),
       },
     };
+    eventEmitter = { emit: jest.fn() };
 
     const module: TestingModule = await Test.createTestingModule({
-      providers: [TasksService, { provide: PrismaService, useValue: prisma }],
+      providers: [
+        TasksService,
+        { provide: PrismaService, useValue: prisma },
+        { provide: EventEmitter2, useValue: eventEmitter },
+      ],
     }).compile();
 
     service = module.get<TasksService>(TasksService);
@@ -96,6 +104,37 @@ describe('TasksService', () => {
       expect(args.data.reporterId).toBe('user-1');
       expect(args.data.projectId).toBe('proj-1');
     });
+
+    it('emits TaskAssignedEvent when created with an assignee', async () => {
+      prisma.project.findUnique.mockResolvedValue({ id: 'proj-1', workspaceId: 'ws-1' });
+      prisma.workspaceMember.findUnique.mockResolvedValue({ role: WorkspaceRole.MEMBER });
+      prisma.task.create.mockResolvedValue({
+        id: 'task-1',
+        title: 'Task',
+        projectId: 'proj-1',
+      });
+
+      await service.create('user-1', 'proj-1', { title: 'Task', assigneeId: 'user-2' });
+
+      expect(eventEmitter.emit).toHaveBeenCalledWith(
+        TASK_ASSIGNED_EVENT,
+        expect.objectContaining({ taskId: 'task-1', assigneeId: 'user-2' }),
+      );
+    });
+
+    it('does not emit TaskAssignedEvent when created without an assignee', async () => {
+      prisma.project.findUnique.mockResolvedValue({ id: 'proj-1', workspaceId: 'ws-1' });
+      prisma.workspaceMember.findUnique.mockResolvedValue({ role: WorkspaceRole.MEMBER });
+      prisma.task.create.mockResolvedValue({
+        id: 'task-1',
+        title: 'Task',
+        projectId: 'proj-1',
+      });
+
+      await service.create('user-1', 'proj-1', { title: 'Task' });
+
+      expect(eventEmitter.emit).not.toHaveBeenCalled();
+    });
   });
 
   describe('update - status transitions', () => {
@@ -119,6 +158,25 @@ describe('TasksService', () => {
       });
 
       expect(prisma.task.update).toHaveBeenCalled();
+      expect(eventEmitter.emit).not.toHaveBeenCalled();
+    });
+
+    it('emits TaskCompletedEvent when a task transitions into DONE', async () => {
+      const reviewTask = {
+        ...baseTask,
+        status: TaskStatus.REVIEW,
+        reporterId: 'reporter-1',
+      };
+      prisma.task.findUnique.mockResolvedValue(reviewTask);
+      prisma.workspaceMember.findUnique.mockResolvedValue({ role: WorkspaceRole.MEMBER });
+      prisma.task.update.mockResolvedValue({ ...reviewTask, status: TaskStatus.DONE });
+
+      await service.update('user-1', 'proj-1', 'task-1', { status: TaskStatus.DONE });
+
+      expect(eventEmitter.emit).toHaveBeenCalledWith(
+        TASK_COMPLETED_EVENT,
+        expect.objectContaining({ taskId: 'task-1', reporterId: 'reporter-1' }),
+      );
     });
 
     it('rejects skipping a step in the workflow', async () => {
