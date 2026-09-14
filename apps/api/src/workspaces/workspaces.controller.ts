@@ -81,9 +81,10 @@ export class WorkspacesController {
   @Roles(WorkspaceRole.ADMIN)
   @ApiOperation({ summary: 'Invite or update a workspace member (ADMIN or OWNER only)' })
   inviteMember(
+    @CurrentUser('userId') userId: string,
     @Param('workspaceId', ParseUUIDPipe) workspaceId: string,
     @Body() dto: InviteWorkspaceMemberDto,
   ) {
-    return this.workspacesService.inviteMember(workspaceId, dto.userId, dto.role);
+    return this.workspacesService.inviteMember(workspaceId, userId, dto.userId, dto.role);
   }
 }

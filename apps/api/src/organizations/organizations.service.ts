@@ -4,14 +4,19 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateOrganizationDto } from './dto/create-organization.dto';
 import { UpdateOrganizationDto } from './dto/update-organization.dto';
 import { WorkspaceRole } from '../common/enums/workspace-role.enum';
+import { USER_INVITED_EVENT, UserInvitedEvent } from '../common/events';
 
 @Injectable()
 export class OrganizationsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly eventEmitter: EventEmitter2,
+  ) {}
 
   async create(userId: string, dto: CreateOrganizationDto) {
     const existing = await this.prisma.organization.findUnique({
@@ -89,17 +94,37 @@ export class OrganizationsService {
       WorkspaceRole.OWNER,
       WorkspaceRole.ADMIN,
     ]);
+    const organization = await this.prisma.organization.findUnique({
+      where: { id: organizationId },
+      select: { name: true },
+    });
 
     const invitee = await this.prisma.user.findUnique({ where: { id: inviteeUserId } });
     if (!invitee) {
       throw new NotFoundException('Invited user does not exist.');
     }
 
-    return this.prisma.organizationMember.upsert({
+    const membership = await this.prisma.organizationMember.upsert({
       where: { organizationId_userId: { organizationId, userId: inviteeUserId } },
       update: { role },
       create: { organizationId, userId: inviteeUserId, role },
     });
+
+    this.eventEmitter.emit(
+      USER_INVITED_EVENT,
+      new UserInvitedEvent(
+        'organization',
+        organizationId,
+        // assertRole above already confirmed the caller's membership in this
+        // organization, so the row is guaranteed to still exist here.
+        organization!.name,
+        inviteeUserId,
+        userId,
+        role,
+      ),
+    );
+
+    return membership;
   }
 
   private async assertRole(
