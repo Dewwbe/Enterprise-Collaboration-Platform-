@@ -2,7 +2,7 @@
   "info": {
     "_postman_id": "ecp-platform-week1-4-collection",
     "name": "Enterprise Collaboration Platform API",
-    "description": "Covers every endpoint implemented through Week 3-4 (Section 4 of the requirement doc): Auth, Users, Organizations, Workspaces, Projects, Tasks, Comments, plus a folder demonstrating RBAC enforcement (401/403) and a final destructive Cleanup folder.\n\n**Setup**\n1. `docker compose up -d postgres redis`\n2. `npm run prisma:migrate -w apps/api`\n3. `npm run dev -w apps/api` (listens on http://localhost:3000, prefix `/api/v1`)\n4. Run this collection top-to-bottom with the Collection Runner, or work through folders individually - each folder captures the ids it creates into collection variables (`{{organizationId}}`, `{{workspaceId}}`, `{{projectId}}`, `{{taskId}}`, `{{commentId}}`) for the next folder to reuse.\n\n**Recommended order**: Auth -> Users -> Organizations -> Workspaces -> Projects -> Tasks -> Comments -> RBAC Examples -> Cleanup (Destructive). The Cleanup folder is last on purpose - it deletes the resources created above, so run it only when you're done exploring.\n\nEvery success response is wrapped by the API's global interceptor as `{ success, statusCode, data }`; tests below read `data` accordingly. Two accounts are used throughout: the primary caller (`{{accessToken}}`, ends up OWNER of the org/workspace) and an invitee (`{{inviteeAccessToken}}`, added as a VIEWER) used to demonstrate RBAC denial in the RBAC Examples folder.",
+    "description": "Covers every endpoint implemented through Week 3-4 (Section 4 of the requirement doc): Auth, Users, Organizations, Workspaces, Projects, Tasks, Comments, plus a folder demonstrating RBAC enforcement (401/403) and a final destructive Cleanup folder.\n\n**Setup**\n1. `docker compose up -d postgres redis`\n2. `npm run prisma:migrate -w apps/api`\n3. `npm run dev -w apps/api` (listens on http://localhost:3000, prefix `/api/v1`)\n4. Run this collection top-to-bottom with the Collection Runner, or work through folders individually - each folder captures the ids it creates into collection variables (`{{organizationId}}`, `{{workspaceId}}`, `{{projectId}}`, `{{taskId}}`, `{{commentId}}`) for the next folder to reuse.\n\n**Recommended order**: Auth -> Users -> Organizations -> Workspaces -> Projects -> Tasks -> Comments -> RBAC Examples -> Cleanup (Destructive). The Cleanup folder is last on purpose - it deletes the resources created above, so run it only when you're done exploring.\n\n**Re-runnable by design**: `Register`, `Register (Invitee)`, `Create Organization`, and `Create Workspace` regenerate a fresh random email/slug in their Pre-request Script on every single execution (never reused across runs). That means the whole collection can be run via the Collection Runner as many times as you want, back to back, even if a previous run's Cleanup folder was skipped or failed partway - each run always creates its own brand-new user, org, and workspace instead of colliding with (or pointing at stale ids from) an earlier run. `Register`'s Pre-request Script also clears any same-named keys from the active Postman **Environment** first, since Environment variables take precedence over Collection variables in Postman - so a leftover `accessToken`/`refreshToken`/etc. saved in an Environment from earlier manual testing can never shadow the fresh values this run produces.\n\n**Running the whole collection in one go**: use the Collection Runner (or Run button) and select the collection root, not an individual folder, so every folder executes in the order below in a single run. If you want the run to keep going and show you every result even when a step fails, make sure the Runner's *(Postman app version-dependent, roughly)* \"Stop run on error\" / \"Halt on test failure\" toggle is left OFF - it's off by default. Do not select a saved Environment that predates this collection unless you're sure it doesn't define `accessToken`, `refreshToken`, `organizationId`, `workspaceId`, `projectId`, `taskId`, or `commentId` - \"No Environment\" is the simplest safe choice since this collection is fully self-contained via Collection variables.\n\nEvery success response is wrapped by the API's global interceptor as `{ success, statusCode, data }`; tests below read `data` accordingly. Two accounts are used throughout: the primary caller (`{{accessToken}}`, ends up OWNER of the org/workspace) and an invitee (`{{inviteeAccessToken}}`, added as a VIEWER) used to demonstrate RBAC denial in the RBAC Examples folder.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "auth": {
@@ -56,10 +56,19 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "if (!pm.collectionVariables.get('userEmail')) {",
-                  "  pm.collectionVariables.set('userEmail', `dewmini.qa.${Date.now()}@example.com`);",
-                  "  pm.collectionVariables.set('userPassword', 'Str0ngP@ssw0rd!');",
-                  "}"
+                  "// Guard against a stale Environment shadowing these collection variables",
+                  "// (Postman resolves Environment values ahead of Collection values with the",
+                  "// same key, so a leftover accessToken/refreshToken/etc. from manual testing",
+                  "// in an active Environment would silently override what this run just set).",
+                  "[",
+                  "  'accessToken', 'refreshToken', 'userId', 'userEmail', 'userPassword',",
+                  "  'inviteeUserId', 'inviteeEmail', 'inviteePassword', 'inviteeAccessToken',",
+                  "  'organizationId', 'orgSlug', 'workspaceId', 'wsSlug', 'projectId', 'taskId', 'commentId'",
+                  "].forEach((key) => pm.environment.unset(key));",
+                  "",
+                  "const runId = `${Date.now()}-${Math.floor(Math.random() * 1e6)}`;",
+                  "pm.collectionVariables.set('userEmail', `dewmini.qa.${runId}@example.com`);",
+                  "pm.collectionVariables.set('userPassword', 'Str0ngP@ssw0rd!');"
                 ]
               }
             },
@@ -107,10 +116,9 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "if (!pm.collectionVariables.get('inviteeEmail')) {",
-                  "  pm.collectionVariables.set('inviteeEmail', `dewmini.qa.invitee.${Date.now()}@example.com`);",
-                  "  pm.collectionVariables.set('inviteePassword', 'Str0ngP@ssw0rd!');",
-                  "}"
+                  "const runId = `${Date.now()}-${Math.floor(Math.random() * 1e6)}`;",
+                  "pm.collectionVariables.set('inviteeEmail', `dewmini.qa.invitee.${runId}@example.com`);",
+                  "pm.collectionVariables.set('inviteePassword', 'Str0ngP@ssw0rd!');"
                 ]
               }
             },
@@ -325,9 +333,7 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "if (!pm.collectionVariables.get('orgSlug')) {",
-                  "  pm.collectionVariables.set('orgSlug', `ecp-qa-${Date.now()}`);",
-                  "}"
+                  "pm.collectionVariables.set('orgSlug', `ecp-qa-${Date.now()}-${Math.floor(Math.random() * 1e6)}`);"
                 ]
               }
             },
@@ -475,9 +481,7 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "if (!pm.collectionVariables.get('wsSlug')) {",
-                  "  pm.collectionVariables.set('wsSlug', `product-eng-${Date.now()}`);",
-                  "}"
+                  "pm.collectionVariables.set('wsSlug', `product-eng-${Date.now()}-${Math.floor(Math.random() * 1e6)}`);"
                 ]
               }
             },
