@@ -1,0 +1,1302 @@
+{
+  "info": {
+    "_postman_id": "ecp-platform-week1-4-collection",
+    "name": "Enterprise Collaboration Platform API",
+    "description": "Covers every endpoint implemented through Week 3-4 (Section 4 of the requirement doc): Auth, Users, Organizations, Workspaces, Projects, Tasks, Comments, plus a folder demonstrating RBAC enforcement (401/403) and a final destructive Cleanup folder.\n\n**Setup**\n1. `docker compose up -d postgres redis`\n2. `npm run prisma:migrate -w apps/api`\n3. `npm run dev -w apps/api` (listens on http://localhost:3000, prefix `/api/v1`)\n4. Run this collection top-to-bottom with the Collection Runner, or work through folders individually - each folder captures the ids it creates into collection variables (`{{organizationId}}`, `{{workspaceId}}`, `{{projectId}}`, `{{taskId}}`, `{{commentId}}`) for the next folder to reuse.\n\n**Recommended order**: Auth -> Users -> Organizations -> Workspaces -> Projects -> Tasks -> Comments -> RBAC Examples -> Cleanup (Destructive). The Cleanup folder is last on purpose - it deletes the resources created above, so run it only when you're done exploring.\n\n**Re-runnable by design**: `Register`, `Register (Invitee)`, `Create Organization`, and `Create Workspace` regenerate a fresh random email/slug in their Pre-request Script on every single execution (never reused across runs). That means the whole collection can be run via the Collection Runner as many times as you want, back to back, even if a previous run's Cleanup folder was skipped or failed partway - each run always creates its own brand-new user, org, and workspace instead of colliding with (or pointing at stale ids from) an earlier run. `Register`'s Pre-request Script also clears any same-named keys from the active Postman **Environment** first, since Environment variables take precedence over Collection variables in Postman - so a leftover `accessToken`/`refreshToken`/etc. saved in an Environment from earlier manual testing can never shadow the fresh values this run produces.\n\n**Running the whole collection in one go**: use the Collection Runner (or Run button) and select the collection root, not an individual folder, so every folder executes in the order below in a single run. If you want the run to keep going and show you every result even when a step fails, make sure the Runner's *(Postman app version-dependent, roughly)* \"Stop run on error\" / \"Halt on test failure\" toggle is left OFF - it's off by default. Do not select a saved Environment that predates this collection unless you're sure it doesn't define `accessToken`, `refreshToken`, `organizationId`, `workspaceId`, `projectId`, `taskId`, or `commentId` - \"No Environment\" is the simplest safe choice since this collection is fully self-contained via Collection variables.\n\nEvery success response is wrapped by the API's global interceptor as `{ success, statusCode, data }`; tests below read `data` accordingly. Two accounts are used throughout: the primary caller (`{{accessToken}}`, ends up OWNER of the org/workspace) and an invitee (`{{inviteeAccessToken}}`, added as a VIEWER) used to demonstrate RBAC denial in the RBAC Examples folder.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }]
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:3000/api/v1", "type": "string" },
+    { "key": "accessToken", "value": "", "type": "string" },
+    { "key": "refreshToken", "value": "", "type": "string" },
+    { "key": "userId", "value": "", "type": "string" },
+    { "key": "userEmail", "value": "", "type": "string" },
+    { "key": "userPassword", "value": "", "type": "string" },
+    { "key": "inviteeUserId", "value": "", "type": "string" },
+    { "key": "inviteeEmail", "value": "", "type": "string" },
+    { "key": "inviteePassword", "value": "", "type": "string" },
+    { "key": "inviteeAccessToken", "value": "", "type": "string" },
+    { "key": "organizationId", "value": "", "type": "string" },
+    { "key": "orgSlug", "value": "", "type": "string" },
+    { "key": "workspaceId", "value": "", "type": "string" },
+    { "key": "wsSlug", "value": "", "type": "string" },
+    { "key": "projectId", "value": "", "type": "string" },
+    { "key": "taskId", "value": "", "type": "string" },
+    { "key": "commentId", "value": "", "type": "string" }
+  ],
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Register",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{userEmail}}\",\n  \"password\": \"{{userPassword}}\",\n  \"firstName\": \"Dewmini\",\n  \"lastName\": \"Chamodya\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/register",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "register"]
+            },
+            "description": "Creates the primary account used through the rest of the collection."
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Guard against a stale Environment shadowing these collection variables",
+                  "// (Postman resolves Environment values ahead of Collection values with the",
+                  "// same key, so a leftover accessToken/refreshToken/etc. from manual testing",
+                  "// in an active Environment would silently override what this run just set).",
+                  "[",
+                  "  'accessToken', 'refreshToken', 'userId', 'userEmail', 'userPassword',",
+                  "  'inviteeUserId', 'inviteeEmail', 'inviteePassword', 'inviteeAccessToken',",
+                  "  'organizationId', 'orgSlug', 'workspaceId', 'wsSlug', 'projectId', 'taskId', 'commentId'",
+                  "].forEach((key) => pm.environment.unset(key));",
+                  "",
+                  "const runId = `${Date.now()}-${Math.floor(Math.random() * 1e6)}`;",
+                  "pm.collectionVariables.set('userEmail', `dewmini.qa.${runId}@example.com`);",
+                  "pm.collectionVariables.set('userPassword', 'Str0ngP@ssw0rd!');"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 201', function () { pm.response.to.have.status(201); });",
+                  "const json = pm.response.json();",
+                  "pm.test('Response has tokens and user', function () {",
+                  "  pm.expect(json.data.accessToken).to.be.a('string');",
+                  "  pm.expect(json.data.refreshToken).to.be.a('string');",
+                  "  pm.expect(json.data.user.id).to.be.a('string');",
+                  "});",
+                  "pm.collectionVariables.set('accessToken', json.data.accessToken);",
+                  "pm.collectionVariables.set('refreshToken', json.data.refreshToken);",
+                  "pm.collectionVariables.set('userId', json.data.user.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Register (Invitee)",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{inviteeEmail}}\",\n  \"password\": \"{{inviteePassword}}\",\n  \"firstName\": \"Ayasana\",\n  \"lastName\": \"Invitee\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/register",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "register"]
+            },
+            "description": "Creates a second account, later invited into the workspace as VIEWER - used in the RBAC Examples folder to demonstrate 403 responses."
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const runId = `${Date.now()}-${Math.floor(Math.random() * 1e6)}`;",
+                  "pm.collectionVariables.set('inviteeEmail', `dewmini.qa.invitee.${runId}@example.com`);",
+                  "pm.collectionVariables.set('inviteePassword', 'Str0ngP@ssw0rd!');"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 201', function () { pm.response.to.have.status(201); });",
+                  "const json = pm.response.json();",
+                  "pm.collectionVariables.set('inviteeUserId', json.data.user.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{userEmail}}\",\n  \"password\": \"{{userPassword}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "login"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });",
+                  "const json = pm.response.json();",
+                  "pm.collectionVariables.set('accessToken', json.data.accessToken);",
+                  "pm.collectionVariables.set('refreshToken', json.data.refreshToken);",
+                  "pm.collectionVariables.set('userId', json.data.user.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Refresh Token",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/refresh",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "refresh"]
+            },
+            "description": "The refresh token is validated from the request body (rotation strategy), not an Authorization header."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });",
+                  "const json = pm.response.json();",
+                  "pm.collectionVariables.set('accessToken', json.data.accessToken);",
+                  "pm.collectionVariables.set('refreshToken', json.data.refreshToken);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/auth/logout",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "logout"]
+            },
+            "description": "Revokes all active refresh tokens for the caller. Run this last if you want to prove the old refresh token stops working - it's placed here for documentation purposes and does not run automatically before later folders."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 204', function () { pm.response.to.have.status(204); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Users",
+      "item": [
+        {
+          "name": "Get Me",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/users/me",
+              "host": ["{{baseUrl}}"],
+              "path": ["users", "me"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Returns the caller profile', function () {",
+                  "  const json = pm.response.json();",
+                  "  pm.expect(json.data.id).to.eql(pm.collectionVariables.get('userId'));",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Lookup User by Email",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/users/lookup?email={{inviteeEmail}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["users", "lookup"],
+              "query": [{ "key": "email", "value": "{{inviteeEmail}}" }]
+            },
+            "description": "Used to find a teammate's user id before inviting them to an organization/workspace."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });",
+                  "const json = pm.response.json();",
+                  "if (json.data && json.data.id) {",
+                  "  pm.collectionVariables.set('inviteeUserId', json.data.id);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get User by Id",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/users/{{userId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["users", "{{userId}}"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Organizations",
+      "item": [
+        {
+          "name": "Create Organization",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"EFutures QA Org\",\n  \"slug\": \"{{orgSlug}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/organizations",
+              "host": ["{{baseUrl}}"],
+              "path": ["organizations"]
+            },
+            "description": "The caller becomes OWNER of the new organization."
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set('orgSlug', `ecp-qa-${Date.now()}-${Math.floor(Math.random() * 1e6)}`);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 201', function () { pm.response.to.have.status(201); });",
+                  "const json = pm.response.json();",
+                  "pm.collectionVariables.set('organizationId', json.data.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List Organizations",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/organizations",
+              "host": ["{{baseUrl}}"],
+              "path": ["organizations"]
+            },
+            "description": "Lists organizations the caller belongs to."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Organization",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/organizations/{{organizationId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["organizations", "{{organizationId}}"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update Organization",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"EFutures QA Org (Updated)\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/organizations/{{organizationId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["organizations", "{{organizationId}}"]
+            },
+            "description": "OWNER/ADMIN only."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Invite/Update Member",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"{{inviteeUserId}}\",\n  \"role\": \"MEMBER\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/organizations/{{organizationId}}/members",
+              "host": ["{{baseUrl}}"],
+              "path": ["organizations", "{{organizationId}}", "members"]
+            },
+            "description": "Run 'Register (Invitee)' first so {{inviteeUserId}} is populated."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 201', function () { pm.response.to.have.status(201); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Workspaces",
+      "item": [
+        {
+          "name": "Create Workspace",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"organizationId\": \"{{organizationId}}\",\n  \"name\": \"Product Engineering\",\n  \"slug\": \"{{wsSlug}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/workspaces",
+              "host": ["{{baseUrl}}"],
+              "path": ["workspaces"]
+            },
+            "description": "The caller becomes OWNER of the new workspace. Requires the caller to be OWNER/ADMIN of {{organizationId}}."
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set('wsSlug', `product-eng-${Date.now()}-${Math.floor(Math.random() * 1e6)}`);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 201', function () { pm.response.to.have.status(201); });",
+                  "const json = pm.response.json();",
+                  "pm.collectionVariables.set('workspaceId', json.data.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List Workspaces",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/workspaces",
+              "host": ["{{baseUrl}}"],
+              "path": ["workspaces"]
+            },
+            "description": "Lists workspaces the caller belongs to."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Workspace",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/workspaces/{{workspaceId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["workspaces", "{{workspaceId}}"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update Workspace",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Product Engineering (Updated)\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/workspaces/{{workspaceId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["workspaces", "{{workspaceId}}"]
+            },
+            "description": "ADMIN or OWNER only."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Invite/Update Member",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"{{inviteeUserId}}\",\n  \"role\": \"VIEWER\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/workspaces/{{workspaceId}}/members",
+              "host": ["{{baseUrl}}"],
+              "path": ["workspaces", "{{workspaceId}}", "members"]
+            },
+            "description": "ADMIN or OWNER only. Adds the invitee as VIEWER, deliberately, so the RBAC Examples folder can demonstrate a 403 when that account attempts a MEMBER+ action."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 201', function () { pm.response.to.have.status(201); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Projects",
+      "item": [
+        {
+          "name": "Create Project",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Website Redesign\",\n  \"description\": \"Q3 marketing site revamp\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/workspaces/{{workspaceId}}/projects",
+              "host": ["{{baseUrl}}"],
+              "path": ["workspaces", "{{workspaceId}}", "projects"]
+            },
+            "description": "MEMBER or above."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 201', function () { pm.response.to.have.status(201); });",
+                  "const json = pm.response.json();",
+                  "pm.collectionVariables.set('projectId', json.data.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List Projects",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/workspaces/{{workspaceId}}/projects?search=&includeArchived=false",
+              "host": ["{{baseUrl}}"],
+              "path": ["workspaces", "{{workspaceId}}", "projects"],
+              "query": [
+                { "key": "search", "value": "", "disabled": true },
+                { "key": "includeArchived", "value": "false", "disabled": true }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Project",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/workspaces/{{workspaceId}}/projects/{{projectId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["workspaces", "{{workspaceId}}", "projects", "{{projectId}}"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update Project",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"description\": \"Q3 marketing site revamp - updated scope\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/workspaces/{{workspaceId}}/projects/{{projectId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["workspaces", "{{workspaceId}}", "projects", "{{projectId}}"]
+            },
+            "description": "ADMIN or OWNER only."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Archive Project",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/workspaces/{{workspaceId}}/projects/{{projectId}}/archive",
+              "host": ["{{baseUrl}}"],
+              "path": ["workspaces", "{{workspaceId}}", "projects", "{{projectId}}", "archive"]
+            },
+            "description": "ADMIN or OWNER only."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 201', function () { pm.response.to.have.status(201); });",
+                  "pm.test('isArchived is true', function () {",
+                  "  pm.expect(pm.response.json().data.isArchived).to.eql(true);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Restore Project",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/workspaces/{{workspaceId}}/projects/{{projectId}}/restore",
+              "host": ["{{baseUrl}}"],
+              "path": ["workspaces", "{{workspaceId}}", "projects", "{{projectId}}", "restore"]
+            },
+            "description": "ADMIN or OWNER only. Reverses Archive Project so the project stays usable for the Tasks folder."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 201', function () { pm.response.to.have.status(201); });",
+                  "pm.test('isArchived is false', function () {",
+                  "  pm.expect(pm.response.json().data.isArchived).to.eql(false);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Tasks",
+      "item": [
+        {
+          "name": "Create Task",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Set up CI pipeline\",\n  \"description\": \"Run lint, unit, and e2e tests on every PR.\",\n  \"priority\": \"HIGH\",\n  \"dueDate\": \"2026-12-31T00:00:00.000Z\",\n  \"labels\": [\"backend\", \"infra\"],\n  \"assigneeId\": \"{{inviteeUserId}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/projects/{{projectId}}/tasks",
+              "host": ["{{baseUrl}}"],
+              "path": ["projects", "{{projectId}}", "tasks"]
+            },
+            "description": "MEMBER or above. The assignee must already be a workspace member - run Workspaces > Invite/Update Member first."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 201', function () { pm.response.to.have.status(201); });",
+                  "const json = pm.response.json();",
+                  "pm.collectionVariables.set('taskId', json.data.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List Tasks",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/projects/{{projectId}}/tasks?sort=-createdAt&page=1&limit=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["projects", "{{projectId}}", "tasks"],
+              "query": [
+                { "key": "status", "value": "", "disabled": true },
+                { "key": "priority", "value": "", "disabled": true },
+                { "key": "assigneeId", "value": "", "disabled": true },
+                { "key": "sort", "value": "-createdAt" },
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "20" }
+              ]
+            },
+            "description": "Supports ?status=&priority=&assigneeId=&sort=&page=&limit= (sort accepts createdAt|dueDate|priority|status|title, optionally prefixed with '-' for descending)."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Response is paginated', function () {",
+                  "  const data = pm.response.json().data;",
+                  "  pm.expect(data.items).to.be.an('array');",
+                  "  pm.expect(data.total).to.be.a('number');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Task",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/projects/{{projectId}}/tasks/{{taskId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["projects", "{{projectId}}", "tasks", "{{taskId}}"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update Task (Move to In Progress)",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"IN_PROGRESS\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/projects/{{projectId}}/tasks/{{taskId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["projects", "{{projectId}}", "tasks", "{{taskId}}"]
+            },
+            "description": "MEMBER or above. Status must follow TODO -> IN_PROGRESS -> REVIEW -> DONE; a new task starts at TODO, so this is the one legal next step."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Status moved to IN_PROGRESS', function () {",
+                  "  pm.expect(pm.response.json().data.status).to.eql('IN_PROGRESS');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "[400] Illegal Status Transition Example",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"DONE\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/projects/{{projectId}}/tasks/{{taskId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["projects", "{{projectId}}", "tasks", "{{taskId}}"]
+            },
+            "description": "The task is currently IN_PROGRESS, so the only legal next status is REVIEW - jumping straight to DONE must be rejected."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 400', function () { pm.response.to.have.status(400); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Comments",
+      "item": [
+        {
+          "name": "Create Comment",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"body\": \"Looks good, one small nit on the naming.\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/tasks/{{taskId}}/comments",
+              "host": ["{{baseUrl}}"],
+              "path": ["tasks", "{{taskId}}", "comments"]
+            },
+            "description": "MEMBER or above."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 201', function () { pm.response.to.have.status(201); });",
+                  "const json = pm.response.json();",
+                  "pm.collectionVariables.set('commentId', json.data.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List Comments",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/tasks/{{taskId}}/comments",
+              "host": ["{{baseUrl}}"],
+              "path": ["tasks", "{{taskId}}", "comments"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update Comment (Edit Own)",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"body\": \"Looks good — nit addressed, approved.\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/tasks/{{taskId}}/comments/{{commentId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["tasks", "{{taskId}}", "comments", "{{commentId}}"]
+            },
+            "description": "Only the comment's own author may edit it, regardless of workspace role."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Delete Comment (Own)",
+          "request": {
+            "method": "DELETE",
+            "url": {
+              "raw": "{{baseUrl}}/tasks/{{taskId}}/comments/{{commentId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["tasks", "{{taskId}}", "comments", "{{commentId}}"]
+            },
+            "description": "Only the comment's own author may delete it, regardless of workspace role."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 204', function () { pm.response.to.have.status(204); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "RBAC Examples (401/403)",
+      "item": [
+        {
+          "name": "Login as Invitee",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{inviteeEmail}}\",\n  \"password\": \"{{inviteePassword}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "login"]
+            },
+            "description": "Captures a separate token for the invitee account (VIEWER in the workspace), used by the negative tests below without disturbing the primary {{accessToken}}."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });",
+                  "const json = pm.response.json();",
+                  "pm.collectionVariables.set('inviteeAccessToken', json.data.accessToken);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "[401] List Workspaces Without a Token",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/workspaces",
+              "host": ["{{baseUrl}}"],
+              "path": ["workspaces"]
+            },
+            "description": "No Authorization header is sent. The global JwtAuthGuard should reject this before it reaches the controller."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 401', function () { pm.response.to.have.status(401); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "[403] Invitee (VIEWER) Creates a Project",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{inviteeAccessToken}}", "type": "string" }]
+            },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Should Be Rejected\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/workspaces/{{workspaceId}}/projects",
+              "host": ["{{baseUrl}}"],
+              "path": ["workspaces", "{{workspaceId}}", "projects"]
+            },
+            "description": "Creating a project requires MEMBER or above; the invitee is only a VIEWER, so RolesGuard must reject with 403."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 403', function () { pm.response.to.have.status(403); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "[403] Invitee (VIEWER) Deletes the Workspace",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{inviteeAccessToken}}", "type": "string" }]
+            },
+            "method": "DELETE",
+            "url": {
+              "raw": "{{baseUrl}}/workspaces/{{workspaceId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["workspaces", "{{workspaceId}}"]
+            },
+            "description": "Deleting a workspace requires OWNER; the invitee is only a VIEWER, so RolesGuard must reject with 403. Nothing is deleted, so the Cleanup folder still works afterward."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 403', function () { pm.response.to.have.status(403); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Cleanup (Destructive)",
+      "description": "Deletes the resources this collection created. Deliberately placed last and ordered child-first (Task -> Project -> Workspace -> Organization) so earlier folders keep working if you re-run them. Skip this folder if you want to keep exploring the data in Swagger/pgAdmin.",
+      "item": [
+        {
+          "name": "Delete Task",
+          "request": {
+            "method": "DELETE",
+            "url": {
+              "raw": "{{baseUrl}}/projects/{{projectId}}/tasks/{{taskId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["projects", "{{projectId}}", "tasks", "{{taskId}}"]
+            },
+            "description": "ADMIN or OWNER only."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 204', function () { pm.response.to.have.status(204); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Delete Project",
+          "request": {
+            "method": "DELETE",
+            "url": {
+              "raw": "{{baseUrl}}/workspaces/{{workspaceId}}/projects/{{projectId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["workspaces", "{{workspaceId}}", "projects", "{{projectId}}"]
+            },
+            "description": "OWNER only."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 204', function () { pm.response.to.have.status(204); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Archive Workspace",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/workspaces/{{workspaceId}}/archive",
+              "host": ["{{baseUrl}}"],
+              "path": ["workspaces", "{{workspaceId}}", "archive"]
+            },
+            "description": "OWNER only. Demonstrates the archive endpoint (workspaces have no restore endpoint, unlike projects)."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 201', function () { pm.response.to.have.status(201); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Delete Workspace",
+          "request": {
+            "method": "DELETE",
+            "url": {
+              "raw": "{{baseUrl}}/workspaces/{{workspaceId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["workspaces", "{{workspaceId}}"]
+            },
+            "description": "OWNER only."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 204', function () { pm.response.to.have.status(204); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Archive Organization",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/organizations/{{organizationId}}/archive",
+              "host": ["{{baseUrl}}"],
+              "path": ["organizations", "{{organizationId}}", "archive"]
+            },
+            "description": "OWNER only."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 201', function () { pm.response.to.have.status(201); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Delete Organization",
+          "request": {
+            "method": "DELETE",
+            "url": {
+              "raw": "{{baseUrl}}/organizations/{{organizationId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["organizations", "{{organizationId}}"]
+            },
+            "description": "OWNER only. Cascades to any remaining workspaces/projects/tasks/comments under this organization."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 204', function () { pm.response.to.have.status(204); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
