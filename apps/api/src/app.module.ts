@@ -13,6 +13,7 @@ import { CommentsModule } from './comments/comments.module';
 import { TasksModule } from './tasks/tasks.module';
 import { ProjectsModule } from './projects/projects.module';
 import { NotificationsModule } from './notifications/notifications.module';
+import { EmailModule } from './email/email.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { GlobalExceptionFilter } from './common/filters/http-exception.filter';
 import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
@@ -48,6 +49,7 @@ import { TransformInterceptor } from './common/interceptors/transform.intercepto
     TasksModule,
     ProjectsModule,
     NotificationsModule,
+    EmailModule,
   ],
   providers: [
     // Order matters: rate limiting first, then authentication, so unauthenticated
