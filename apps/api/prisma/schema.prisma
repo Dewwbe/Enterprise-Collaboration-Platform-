@@ -55,15 +55,16 @@ model User {
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
 
-  refreshTokens     RefreshToken[]
-  organizations     OrganizationMember[]
-  workspaceMembers  WorkspaceMember[]
-  auditLogs         AuditLog[]
-  assignedTasks     Task[]                @relation("TaskAssignee")
-  reportedTasks     Task[]                @relation("TaskReporter")
-  comments          Comment[]
-  notifications     Notification[]
-  uploadedFiles     Attachment[]
+  refreshTokens       RefreshToken[]
+  passwordResetTokens PasswordResetToken[]
+  organizations       OrganizationMember[]
+  workspaceMembers    WorkspaceMember[]
+  auditLogs           AuditLog[]
+  assignedTasks       Task[]               @relation("TaskAssignee")
+  reportedTasks       Task[]               @relation("TaskReporter")
+  comments            Comment[]
+  notifications       Notification[]
+  uploadedFiles       Attachment[]
 
   @@map("users")
 }
@@ -71,25 +72,41 @@ model User {
 // Refresh tokens are stored hashed, one row per active session, to support
 // rotation and server-side revocation (logout / logout-all).
 model RefreshToken {
-  id        String   @id @default(uuid())
-  tokenHash String   @map("token_hash")
-  userId    String   @map("user_id")
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  expiresAt DateTime @map("expires_at")
+  id        String    @id @default(uuid())
+  tokenHash String    @map("token_hash")
+  userId    String    @map("user_id")
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime  @map("expires_at")
   revokedAt DateTime? @map("revoked_at")
-  createdAt DateTime @default(now()) @map("created_at")
+  createdAt DateTime  @default(now()) @map("created_at")
 
   @@index([userId])
   @@map("refresh_tokens")
 }
 
+// One-time-use reset tokens, stored hashed (SHA-256, looked up by exact
+// match - unlike RefreshToken there's no per-row bcrypt.compare loop needed
+// since the token itself is single-use and short-lived).
+model PasswordResetToken {
+  id        String    @id @default(uuid())
+  tokenHash String    @unique @map("token_hash")
+  userId    String    @map("user_id")
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime  @map("expires_at")
+  usedAt    DateTime? @map("used_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  @@index([userId])
+  @@map("password_reset_tokens")
+}
+
 model Organization {
-  id        String   @id @default(uuid())
-  name      String
-  slug      String   @unique
-  isArchived Boolean @default(false) @map("is_archived")
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  id         String   @id @default(uuid())
+  name       String
+  slug       String   @unique
+  isArchived Boolean  @default(false) @map("is_archived")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
 
   members    OrganizationMember[]
   workspaces Workspace[]
@@ -100,13 +117,13 @@ model Organization {
 // Organization-level membership is intentionally separate from workspace-level
 // RBAC (WorkspaceMember.role) - an org member's workspace role can differ per workspace.
 model OrganizationMember {
-  id             String       @id @default(uuid())
-  organizationId String       @map("organization_id")
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  userId         String       @map("user_id")
-  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id             String        @id @default(uuid())
+  organizationId String        @map("organization_id")
+  organization   Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  userId         String        @map("user_id")
+  user           User          @relation(fields: [userId], references: [id], onDelete: Cascade)
   role           WorkspaceRole @default(MEMBER)
-  createdAt      DateTime     @default(now()) @map("created_at")
+  createdAt      DateTime      @default(now()) @map("created_at")
 
   @@unique([organizationId, userId])
   @@map("organization_members")
@@ -144,14 +161,14 @@ model WorkspaceMember {
 }
 
 model Project {
-  id          String   @id @default(uuid())
+  id          String    @id @default(uuid())
   name        String
   description String?
-  workspaceId String   @map("workspace_id")
+  workspaceId String    @map("workspace_id")
   workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  isArchived  Boolean  @default(false) @map("is_archived")
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
+  isArchived  Boolean   @default(false) @map("is_archived")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
 
   tasks Task[]
 
