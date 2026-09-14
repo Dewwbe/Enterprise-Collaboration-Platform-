@@ -14,7 +14,7 @@ import {
   TaskCompletedEvent,
 } from '../common/events';
 import { CacheService } from '../redis/cache.service';
-import { workspaceStatsCacheKey } from '../common/cache-keys';
+import { dashboardCacheKey, workspaceStatsCacheKey } from '../common/cache-keys';
 import { WorkspaceAccessService } from '../common/access/workspace-access.service';
 
 @Injectable()
@@ -89,6 +89,7 @@ export class TasksService {
           userId,
         ),
       );
+      await this.cache.del(dashboardCacheKey(dto.assigneeId));
     }
 
     await this.cache.del(workspaceStatsCacheKey(project.workspaceId));
@@ -189,6 +190,10 @@ export class TasksService {
           userId,
         ),
       );
+      await this.cache.del(dashboardCacheKey(dto.assigneeId));
+      if (task.assigneeId) {
+        await this.cache.del(dashboardCacheKey(task.assigneeId));
+      }
     }
 
     if (dto.status === TaskStatus.DONE && task.status !== TaskStatus.DONE) {
@@ -206,6 +211,9 @@ export class TasksService {
 
     if (dto.status && dto.status !== task.status) {
       await this.cache.del(workspaceStatsCacheKey(task.project.workspaceId));
+      if (updated.assigneeId) {
+        await this.cache.del(dashboardCacheKey(updated.assigneeId));
+      }
     }
 
     return updated;
@@ -223,5 +231,8 @@ export class TasksService {
     );
     await this.prisma.task.delete({ where: { id: taskId } });
     await this.cache.del(workspaceStatsCacheKey(task.project.workspaceId));
+    if (task.assigneeId) {
+      await this.cache.del(dashboardCacheKey(task.assigneeId));
+    }
   }
 }
