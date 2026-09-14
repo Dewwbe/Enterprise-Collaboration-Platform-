@@ -10,6 +10,7 @@ import { AttachmentsService } from './attachments.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { STORAGE_SERVICE } from '../storage/storage.interface';
 import { WorkspaceRole } from '../common/enums/workspace-role.enum';
+import { WorkspaceAccessService } from '../common/access/workspace-access.service';
 
 describe('AttachmentsService', () => {
   let service: AttachmentsService;
@@ -50,6 +51,7 @@ describe('AttachmentsService', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         AttachmentsService,
+        WorkspaceAccessService,
         { provide: PrismaService, useValue: prisma },
         { provide: STORAGE_SERVICE, useValue: storage },
         { provide: ConfigService, useValue: { get: () => 10 } },

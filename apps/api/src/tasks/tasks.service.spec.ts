@@ -11,6 +11,7 @@ import { WorkspaceRole } from '../common/enums/workspace-role.enum';
 import { TaskStatus } from '../common/enums/task-status.enum';
 import { TASK_ASSIGNED_EVENT, TASK_COMPLETED_EVENT } from '../common/events';
 import { CacheService } from '../redis/cache.service';
+import { WorkspaceAccessService } from '../common/access/workspace-access.service';
 
 describe('TasksService', () => {
   let service: TasksService;
@@ -48,6 +49,7 @@ describe('TasksService', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         TasksService,
+        WorkspaceAccessService,
         { provide: PrismaService, useValue: prisma },
         { provide: EventEmitter2, useValue: eventEmitter },
         { provide: CacheService, useValue: cache },

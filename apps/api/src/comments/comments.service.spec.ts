@@ -5,6 +5,7 @@ import { CommentsService } from './comments.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { WorkspaceRole } from '../common/enums/workspace-role.enum';
 import { COMMENT_ADDED_EVENT } from '../common/events';
+import { WorkspaceAccessService } from '../common/access/workspace-access.service';
 
 describe('CommentsService', () => {
   let service: CommentsService;
@@ -38,6 +39,7 @@ describe('CommentsService', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         CommentsService,
+        WorkspaceAccessService,
         { provide: PrismaService, useValue: prisma },
         { provide: EventEmitter2, useValue: eventEmitter },
       ],

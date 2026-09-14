@@ -5,6 +5,7 @@ import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { EventEmitterModule } from '@nestjs/event-emitter';
 import configuration from './config/configuration';
 import { PrismaModule } from './prisma/prisma.module';
+import { WorkspaceAccessModule } from './common/access/workspace-access.module';
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
 import { OrganizationsModule } from './organizations/organizations.module';
@@ -46,6 +47,7 @@ import { AuditLogInterceptor } from './common/interceptors/audit-log.interceptor
     // react asynchronously.
     EventEmitterModule.forRoot(),
     PrismaModule,
+    WorkspaceAccessModule,
     RedisModule,
     StorageModule,
     AuthModule,

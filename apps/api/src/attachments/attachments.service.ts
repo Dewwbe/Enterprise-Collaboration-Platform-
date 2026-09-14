@@ -11,6 +11,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { STORAGE_SERVICE, StorageService } from '../storage/storage.interface';
 import { ROLE_HIERARCHY, WorkspaceRole } from '../common/enums/workspace-role.enum';
 import { ALLOWED_MIME_TYPES } from './attachments.constants';
+import { WorkspaceAccessService } from '../common/access/workspace-access.service';
 
 @Injectable()
 export class AttachmentsService {
@@ -18,26 +19,8 @@ export class AttachmentsService {
     private readonly prisma: PrismaService,
     private readonly configService: ConfigService,
     @Inject(STORAGE_SERVICE) private readonly storage: StorageService,
+    private readonly workspaceAccess: WorkspaceAccessService,
   ) {}
-
-  // Same join-through-project pattern as CommentsService/TasksService - see
-  // the note in tasks.service.ts on why this isn't generalized yet.
-  private async requireTaskMembership(taskId: string, userId: string) {
-    const task = await this.prisma.task.findUnique({
-      where: { id: taskId },
-      include: { project: true },
-    });
-    if (!task) {
-      throw new NotFoundException('Task not found.');
-    }
-    const membership = await this.prisma.workspaceMember.findUnique({
-      where: { workspaceId_userId: { workspaceId: task.project.workspaceId, userId } },
-    });
-    if (!membership) {
-      throw new NotFoundException('Task not found.');
-    }
-    return { task, membership };
-  }
 
   private validateFile(file: Express.Multer.File) {
     if (!file) {
@@ -62,13 +45,14 @@ export class AttachmentsService {
   }
 
   async create(userId: string, taskId: string, file: Express.Multer.File) {
-    const { membership } = await this.requireTaskMembership(taskId, userId);
-    if (
-      ROLE_HIERARCHY[membership.role as WorkspaceRole] <
-      ROLE_HIERARCHY[WorkspaceRole.MEMBER]
-    ) {
-      throw new ForbiddenException('Your workspace role does not permit this action.');
-    }
+    const { membership } = await this.workspaceAccess.requireTaskMembership(
+      taskId,
+      userId,
+    );
+    this.workspaceAccess.assertMinRole(
+      membership.role as WorkspaceRole,
+      WorkspaceRole.MEMBER,
+    );
     this.validateFile(file);
 
     // Unique regardless of original filename, so two uploads named "spec.pdf"
@@ -89,7 +73,7 @@ export class AttachmentsService {
   }
 
   async findAll(userId: string, taskId: string) {
-    await this.requireTaskMembership(taskId, userId);
+    await this.workspaceAccess.requireTaskMembership(taskId, userId);
     return this.prisma.attachment.findMany({
       where: { taskId },
       orderBy: { createdAt: 'desc' },
@@ -107,13 +91,13 @@ export class AttachmentsService {
   }
 
   async getDownload(userId: string, taskId: string, attachmentId: string) {
-    await this.requireTaskMembership(taskId, userId);
+    await this.workspaceAccess.requireTaskMembership(taskId, userId);
     const attachment = await this.requireAttachment(taskId, attachmentId);
     return { attachment, stream: this.storage.getStream(attachment.storageKey) };
   }
 
   async remove(userId: string, taskId: string, attachmentId: string) {
-    const { membership } = await this.requireTaskMembership(taskId, userId);
+    const { membership } = await this.workspaceAccess.requireTaskMembership(taskId, userId);
     const attachment = await this.requireAttachment(taskId, attachmentId);
 
     // Uploader can always remove their own file; ADMIN/OWNER can also clean

@@ -1,21 +1,18 @@
-import {
-  ConflictException,
-  ForbiddenException,
-  Injectable,
-  NotFoundException,
-} from '@nestjs/common';
+import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateOrganizationDto } from './dto/create-organization.dto';
 import { UpdateOrganizationDto } from './dto/update-organization.dto';
 import { WorkspaceRole } from '../common/enums/workspace-role.enum';
 import { USER_INVITED_EVENT, UserInvitedEvent } from '../common/events';
+import { WorkspaceAccessService } from '../common/access/workspace-access.service';
 
 @Injectable()
 export class OrganizationsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly eventEmitter: EventEmitter2,
+    private readonly workspaceAccess: WorkspaceAccessService,
   ) {}
 
   async create(userId: string, dto: CreateOrganizationDto) {
@@ -67,12 +64,12 @@ export class OrganizationsService {
   }
 
   async update(userId: string, id: string, dto: UpdateOrganizationDto) {
-    await this.assertRole(id, userId, [WorkspaceRole.OWNER, WorkspaceRole.ADMIN]);
+    await this.assertOrgRole(id, userId, [WorkspaceRole.OWNER, WorkspaceRole.ADMIN]);
     return this.prisma.organization.update({ where: { id }, data: dto });
   }
 
   async archive(userId: string, id: string) {
-    await this.assertRole(id, userId, [WorkspaceRole.OWNER]);
+    await this.assertOrgRole(id, userId, [WorkspaceRole.OWNER]);
     return this.prisma.organization.update({
       where: { id },
       data: { isArchived: true },
@@ -80,7 +77,7 @@ export class OrganizationsService {
   }
 
   async remove(userId: string, id: string) {
-    await this.assertRole(id, userId, [WorkspaceRole.OWNER]);
+    await this.assertOrgRole(id, userId, [WorkspaceRole.OWNER]);
     await this.prisma.organization.delete({ where: { id } });
   }
 
@@ -90,7 +87,7 @@ export class OrganizationsService {
     inviteeUserId: string,
     role: WorkspaceRole,
   ) {
-    await this.assertRole(organizationId, userId, [
+    await this.assertOrgRole(organizationId, userId, [
       WorkspaceRole.OWNER,
       WorkspaceRole.ADMIN,
     ]);
@@ -127,19 +124,15 @@ export class OrganizationsService {
     return membership;
   }
 
-  private async assertRole(
+  private async assertOrgRole(
     organizationId: string,
     userId: string,
     allowed: WorkspaceRole[],
   ): Promise<void> {
-    const membership = await this.prisma.organizationMember.findUnique({
-      where: { organizationId_userId: { organizationId, userId } },
-    });
-    if (!membership) {
-      throw new NotFoundException('Organization not found.');
-    }
-    if (!allowed.includes(membership.role as WorkspaceRole)) {
-      throw new ForbiddenException('Your role does not permit this action.');
-    }
+    const membership = await this.workspaceAccess.requireOrganizationMembership(
+      organizationId,
+      userId,
+    );
+    this.workspaceAccess.assertRoleIn(membership.role as WorkspaceRole, allowed);
   }
 }
