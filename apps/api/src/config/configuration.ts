@@ -19,4 +19,20 @@ export default () => ({
     host: process.env.REDIS_HOST || 'localhost',
     port: parseInt(process.env.REDIS_PORT || '6379', 10),
   },
+  smtp: {
+    host: process.env.SMTP_HOST || '',
+    port: parseInt(process.env.SMTP_PORT || '587', 10),
+    secure: process.env.SMTP_SECURE === 'true',
+    user: process.env.SMTP_USER || '',
+    password: process.env.SMTP_PASSWORD || '',
+    from: process.env.SMTP_FROM || 'ECP Platform <no-reply@ecp.local>',
+  },
+  queue: {
+    dailyReminderCron: process.env.DAILY_REMINDER_CRON || '0 8 * * *',
+    weeklySummaryCron: process.env.WEEKLY_SUMMARY_CRON || '0 8 * * 1',
+  },
+  upload: {
+    maxSizeMb: parseInt(process.env.UPLOAD_MAX_SIZE_MB || '10', 10),
+    dir: process.env.UPLOAD_DIR || 'uploads',
+  },
 });
