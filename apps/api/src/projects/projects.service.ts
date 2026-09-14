@@ -45,16 +45,28 @@ export class ProjectsService {
 
   async findAll(userId: string, workspaceId: string, query: QueryProjectsDto) {
     await this.requireMembership(workspaceId, userId);
-    return this.prisma.project.findMany({
-      where: {
-        workspaceId,
-        ...(query.includeArchived ? {} : { isArchived: false }),
-        ...(query.search
-          ? { name: { contains: query.search, mode: 'insensitive' as const } }
-          : {}),
-      },
-      orderBy: { createdAt: 'desc' },
-    });
+
+    const page = query.page ?? 1;
+    const limit = query.limit ?? 20;
+    const where = {
+      workspaceId,
+      ...(query.includeArchived ? {} : { isArchived: false }),
+      ...(query.search
+        ? { name: { contains: query.search, mode: 'insensitive' as const } }
+        : {}),
+    };
+
+    const [items, total] = await Promise.all([
+      this.prisma.project.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      this.prisma.project.count({ where }),
+    ]);
+
+    return { items, total, page, limit, totalPages: Math.ceil(total / limit) };
   }
 
   async findOne(userId: string, workspaceId: string, projectId: string) {

@@ -11,6 +11,7 @@ describe('ProjectsService', () => {
     project: {
       findUnique: jest.Mock;
       findMany: jest.Mock;
+      count: jest.Mock;
       create: jest.Mock;
       update: jest.Mock;
       delete: jest.Mock;
@@ -24,6 +25,7 @@ describe('ProjectsService', () => {
       project: {
         findUnique: jest.fn(),
         findMany: jest.fn(),
+        count: jest.fn().mockResolvedValue(0),
         create: jest.fn(),
         update: jest.fn(),
         delete: jest.fn(),
@@ -93,6 +95,37 @@ describe('ProjectsService', () => {
 
       const args = prisma.project.findMany.mock.calls[0][0];
       expect(args.where.name).toEqual({ contains: 'launch', mode: 'insensitive' });
+    });
+
+    it('defaults to page 1 with a limit of 20', async () => {
+      prisma.workspaceMember.findUnique.mockResolvedValue({ role: 'VIEWER' });
+      prisma.project.findMany.mockResolvedValue([]);
+      prisma.project.count.mockResolvedValue(0);
+
+      await service.findAll('user-1', 'ws-1', {});
+
+      const args = prisma.project.findMany.mock.calls[0][0];
+      expect(args.skip).toBe(0);
+      expect(args.take).toBe(20);
+    });
+
+    it('paginates using the requested page and limit', async () => {
+      prisma.workspaceMember.findUnique.mockResolvedValue({ role: 'VIEWER' });
+      prisma.project.findMany.mockResolvedValue([{ id: 'p-1' }]);
+      prisma.project.count.mockResolvedValue(45);
+
+      const result = await service.findAll('user-1', 'ws-1', { page: 2, limit: 10 });
+
+      const args = prisma.project.findMany.mock.calls[0][0];
+      expect(args.skip).toBe(10);
+      expect(args.take).toBe(10);
+      expect(result).toEqual({
+        items: [{ id: 'p-1' }],
+        total: 45,
+        page: 2,
+        limit: 10,
+        totalPages: 5,
+      });
     });
   });
 
