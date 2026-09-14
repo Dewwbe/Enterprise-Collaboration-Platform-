@@ -7,9 +7,9 @@ import { QueryNotificationsDto } from './dto/query-notifications.dto';
 export class NotificationsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  create(userId: string, type: NotificationType, payload: Prisma.InputJsonValue) {
+  create(userId: string, type: NotificationType, payload: Record<string, unknown>) {
     return this.prisma.notification.create({
-      data: { userId, type, payload },
+      data: { userId, type, payload: payload as Prisma.InputJsonValue },
     });
   }
 

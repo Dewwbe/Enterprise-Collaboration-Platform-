@@ -27,4 +27,8 @@ export default () => ({
     password: process.env.SMTP_PASSWORD || '',
     from: process.env.SMTP_FROM || 'ECP Platform <no-reply@ecp.local>',
   },
+  queue: {
+    dailyReminderCron: process.env.DAILY_REMINDER_CRON || '0 8 * * *',
+    weeklySummaryCron: process.env.WEEKLY_SUMMARY_CRON || '0 8 * * 1',
+  },
 });
