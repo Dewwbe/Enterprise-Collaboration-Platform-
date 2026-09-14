@@ -16,6 +16,7 @@ import { CreateOrganizationDto } from './dto/create-organization.dto';
 import { UpdateOrganizationDto } from './dto/update-organization.dto';
 import { InviteMemberDto } from './dto/invite-member.dto';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
+import { AuditLog } from '../common/decorators/audit-log.decorator';
 
 @ApiTags('organizations')
 @ApiBearerAuth()
@@ -42,6 +43,7 @@ export class OrganizationsController {
   }
 
   @Patch(':id')
+  @AuditLog('organization.update', 'Organization', 'id')
   @ApiOperation({ summary: 'Update organization details (OWNER/ADMIN only)' })
   update(
     @CurrentUser('userId') userId: string,
@@ -52,6 +54,7 @@ export class OrganizationsController {
   }
 
   @Post(':id/archive')
+  @AuditLog('organization.archive', 'Organization', 'id')
   @ApiOperation({ summary: 'Archive an organization (OWNER only)' })
   archive(@CurrentUser('userId') userId: string, @Param('id', ParseUUIDPipe) id: string) {
     return this.organizationsService.archive(userId, id);
@@ -59,12 +62,14 @@ export class OrganizationsController {
 
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
+  @AuditLog('organization.delete', 'Organization', 'id')
   @ApiOperation({ summary: 'Permanently delete an organization (OWNER only)' })
   remove(@CurrentUser('userId') userId: string, @Param('id', ParseUUIDPipe) id: string) {
     return this.organizationsService.remove(userId, id);
   }
 
   @Post(':id/members')
+  @AuditLog('organization.inviteMember', 'OrganizationMember')
   @ApiOperation({ summary: 'Invite or update a member of the organization' })
   inviteMember(
     @CurrentUser('userId') userId: string,

@@ -17,6 +17,7 @@ import { CreateTaskDto } from './dto/create-task.dto';
 import { UpdateTaskDto } from './dto/update-task.dto';
 import { QueryTasksDto } from './dto/query-tasks.dto';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
+import { AuditLog } from '../common/decorators/audit-log.decorator';
 
 @ApiTags('tasks')
 @ApiBearerAuth()
@@ -25,6 +26,7 @@ export class TasksController {
   constructor(private readonly tasksService: TasksService) {}
 
   @Post()
+  @AuditLog('task.create', 'Task')
   @ApiOperation({ summary: 'Create a task in a project (MEMBER or above)' })
   create(
     @CurrentUser('userId') userId: string,
@@ -58,6 +60,7 @@ export class TasksController {
   }
 
   @Patch(':taskId')
+  @AuditLog('task.update', 'Task', 'taskId')
   @ApiOperation({
     summary: 'Update a task (MEMBER or above)',
     description:
@@ -74,6 +77,7 @@ export class TasksController {
 
   @Delete(':taskId')
   @HttpCode(HttpStatus.NO_CONTENT)
+  @AuditLog('task.delete', 'Task', 'taskId')
   @ApiOperation({ summary: 'Delete a task (ADMIN or OWNER only)' })
   remove(
     @CurrentUser('userId') userId: string,

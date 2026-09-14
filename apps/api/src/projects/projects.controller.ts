@@ -21,6 +21,7 @@ import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { WorkspaceRole } from '../common/enums/workspace-role.enum';
+import { AuditLog } from '../common/decorators/audit-log.decorator';
 
 @ApiTags('projects')
 @ApiBearerAuth()
@@ -31,6 +32,7 @@ export class ProjectsController {
   @Post()
   @UseGuards(RolesGuard)
   @Roles(WorkspaceRole.MEMBER)
+  @AuditLog('project.create', 'Project')
   @ApiOperation({ summary: 'Create a project in a workspace (MEMBER or above)' })
   create(
     @CurrentUser('userId') userId: string,
@@ -63,6 +65,7 @@ export class ProjectsController {
   @Patch(':projectId')
   @UseGuards(RolesGuard)
   @Roles(WorkspaceRole.ADMIN)
+  @AuditLog('project.update', 'Project', 'projectId')
   @ApiOperation({ summary: 'Update project details (ADMIN or OWNER only)' })
   update(
     @Param('workspaceId', ParseUUIDPipe) workspaceId: string,
@@ -75,6 +78,7 @@ export class ProjectsController {
   @Post(':projectId/archive')
   @UseGuards(RolesGuard)
   @Roles(WorkspaceRole.ADMIN)
+  @AuditLog('project.archive', 'Project', 'projectId')
   @ApiOperation({ summary: 'Archive a project (ADMIN or OWNER only)' })
   archive(
     @Param('workspaceId', ParseUUIDPipe) workspaceId: string,
@@ -86,6 +90,7 @@ export class ProjectsController {
   @Post(':projectId/restore')
   @UseGuards(RolesGuard)
   @Roles(WorkspaceRole.ADMIN)
+  @AuditLog('project.restore', 'Project', 'projectId')
   @ApiOperation({ summary: 'Restore an archived project (ADMIN or OWNER only)' })
   restore(
     @Param('workspaceId', ParseUUIDPipe) workspaceId: string,
@@ -98,6 +103,7 @@ export class ProjectsController {
   @UseGuards(RolesGuard)
   @Roles(WorkspaceRole.OWNER)
   @HttpCode(HttpStatus.NO_CONTENT)
+  @AuditLog('project.delete', 'Project', 'projectId')
   @ApiOperation({ summary: 'Permanently delete a project (OWNER only)' })
   remove(
     @Param('workspaceId', ParseUUIDPipe) workspaceId: string,

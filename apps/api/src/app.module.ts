@@ -20,6 +20,7 @@ import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { GlobalExceptionFilter } from './common/filters/http-exception.filter';
 import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
 import { TransformInterceptor } from './common/interceptors/transform.interceptor';
+import { AuditLogInterceptor } from './common/interceptors/audit-log.interceptor';
 
 @Module({
   imports: [
@@ -63,6 +64,10 @@ import { TransformInterceptor } from './common/interceptors/transform.intercepto
     { provide: APP_FILTER, useClass: GlobalExceptionFilter },
     { provide: APP_INTERCEPTOR, useClass: LoggingInterceptor },
     { provide: APP_INTERCEPTOR, useClass: TransformInterceptor },
+    // Must come after TransformInterceptor: interceptors registered later
+    // sit closer to the controller, so this one sees the raw handler return
+    // value (needed for newValue) before it gets wrapped in {success, data}.
+    { provide: APP_INTERCEPTOR, useClass: AuditLogInterceptor },
   ],
 })
 export class AppModule {}
