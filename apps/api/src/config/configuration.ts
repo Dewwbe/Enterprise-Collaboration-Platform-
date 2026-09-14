@@ -31,4 +31,8 @@ export default () => ({
     dailyReminderCron: process.env.DAILY_REMINDER_CRON || '0 8 * * *',
     weeklySummaryCron: process.env.WEEKLY_SUMMARY_CRON || '0 8 * * 1',
   },
+  upload: {
+    maxSizeMb: parseInt(process.env.UPLOAD_MAX_SIZE_MB || '10', 10),
+    dir: process.env.UPLOAD_DIR || 'uploads',
+  },
 });
