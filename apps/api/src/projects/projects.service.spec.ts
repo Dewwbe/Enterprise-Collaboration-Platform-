@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { NotFoundException } from '@nestjs/common';
 import { ProjectsService } from './projects.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { CacheService } from '../redis/cache.service';
 
 describe('ProjectsService', () => {
   let service: ProjectsService;
@@ -15,6 +16,7 @@ describe('ProjectsService', () => {
       delete: jest.Mock;
     };
   };
+  let cache: { get: jest.Mock; set: jest.Mock; del: jest.Mock };
 
   beforeEach(async () => {
     prisma = {
@@ -27,9 +29,14 @@ describe('ProjectsService', () => {
         delete: jest.fn(),
       },
     };
+    cache = { get: jest.fn(), set: jest.fn(), del: jest.fn() };
 
     const module: TestingModule = await Test.createTestingModule({
-      providers: [ProjectsService, { provide: PrismaService, useValue: prisma }],
+      providers: [
+        ProjectsService,
+        { provide: PrismaService, useValue: prisma },
+        { provide: CacheService, useValue: cache },
+      ],
     }).compile();
 
     service = module.get<ProjectsService>(ProjectsService);
@@ -53,6 +60,7 @@ describe('ProjectsService', () => {
       expect(prisma.project.create).toHaveBeenCalledWith({
         data: { name: 'New Project', description: 'x', workspaceId: 'ws-1' },
       });
+      expect(cache.del).toHaveBeenCalledWith('workspace-stats:ws-1');
     });
   });
 
@@ -119,6 +127,7 @@ describe('ProjectsService', () => {
         where: { id: 'proj-1' },
         data: { isArchived: true },
       });
+      expect(cache.del).toHaveBeenCalledWith('workspace-stats:ws-1');
     });
 
     it('sets isArchived false on restore', async () => {
@@ -150,6 +159,7 @@ describe('ProjectsService', () => {
       await service.remove('ws-1', 'proj-1');
 
       expect(prisma.project.delete).toHaveBeenCalledWith({ where: { id: 'proj-1' } });
+      expect(cache.del).toHaveBeenCalledWith('workspace-stats:ws-1');
     });
   });
 });

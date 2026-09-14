@@ -10,6 +10,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { WorkspaceRole } from '../common/enums/workspace-role.enum';
 import { TaskStatus } from '../common/enums/task-status.enum';
 import { TASK_ASSIGNED_EVENT, TASK_COMPLETED_EVENT } from '../common/events';
+import { CacheService } from '../redis/cache.service';
 
 describe('TasksService', () => {
   let service: TasksService;
@@ -26,6 +27,7 @@ describe('TasksService', () => {
     };
   };
   let eventEmitter: { emit: jest.Mock };
+  let cache: { get: jest.Mock; set: jest.Mock; del: jest.Mock };
 
   beforeEach(async () => {
     prisma = {
@@ -41,12 +43,14 @@ describe('TasksService', () => {
       },
     };
     eventEmitter = { emit: jest.fn() };
+    cache = { get: jest.fn(), set: jest.fn(), del: jest.fn() };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         TasksService,
         { provide: PrismaService, useValue: prisma },
         { provide: EventEmitter2, useValue: eventEmitter },
+        { provide: CacheService, useValue: cache },
       ],
     }).compile();
 
@@ -103,6 +107,7 @@ describe('TasksService', () => {
       const args = prisma.task.create.mock.calls[0][0];
       expect(args.data.reporterId).toBe('user-1');
       expect(args.data.projectId).toBe('proj-1');
+      expect(cache.del).toHaveBeenCalledWith('workspace-stats:ws-1');
     });
 
     it('emits TaskAssignedEvent when created with an assignee', async () => {
@@ -159,6 +164,17 @@ describe('TasksService', () => {
 
       expect(prisma.task.update).toHaveBeenCalled();
       expect(eventEmitter.emit).not.toHaveBeenCalled();
+      expect(cache.del).toHaveBeenCalledWith('workspace-stats:ws-1');
+    });
+
+    it('does not invalidate the workspace stats cache for a non-status update', async () => {
+      prisma.task.findUnique.mockResolvedValue(baseTask);
+      prisma.workspaceMember.findUnique.mockResolvedValue({ role: WorkspaceRole.MEMBER });
+      prisma.task.update.mockResolvedValue({ ...baseTask, title: 'Renamed' });
+
+      await service.update('user-1', 'proj-1', 'task-1', { title: 'Renamed' });
+
+      expect(cache.del).not.toHaveBeenCalled();
     });
 
     it('emits TaskCompletedEvent when a task transitions into DONE', async () => {
@@ -237,6 +253,7 @@ describe('TasksService', () => {
       await service.remove('user-1', 'proj-1', 'task-1');
 
       expect(prisma.task.delete).toHaveBeenCalledWith({ where: { id: 'task-1' } });
+      expect(cache.del).toHaveBeenCalledWith('workspace-stats:ws-1');
     });
 
     it('throws NotFoundException for a task outside the given project', async () => {
