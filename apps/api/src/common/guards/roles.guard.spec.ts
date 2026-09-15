@@ -7,7 +7,12 @@ import { WorkspaceRole } from '../enums/workspace-role.enum';
 describe('RolesGuard', () => {
   let guard: RolesGuard;
   let reflector: { getAllAndOverride: jest.Mock };
-  let workspaceAccess: { requireWorkspaceMembership: jest.Mock };
+  let workspaceAccess: {
+    requireWorkspaceMembership: jest.Mock;
+    requireOrganizationMembership: jest.Mock;
+    requireProjectMembership: jest.Mock;
+    requireTaskMembership: jest.Mock;
+  };
 
   const makeContext = (params: Record<string, string>, user?: { userId: string }) =>
     ({
@@ -20,7 +25,12 @@ describe('RolesGuard', () => {
 
   beforeEach(() => {
     reflector = { getAllAndOverride: jest.fn() };
-    workspaceAccess = { requireWorkspaceMembership: jest.fn() };
+    workspaceAccess = {
+      requireWorkspaceMembership: jest.fn(),
+      requireOrganizationMembership: jest.fn(),
+      requireProjectMembership: jest.fn(),
+      requireTaskMembership: jest.fn(),
+    };
     guard = new RolesGuard(
       reflector as unknown as Reflector,
       workspaceAccess as unknown as WorkspaceAccessService,
@@ -70,7 +80,10 @@ describe('RolesGuard', () => {
     reflector.getAllAndOverride.mockReturnValue([WorkspaceRole.MEMBER]);
     const membership = { role: WorkspaceRole.ADMIN };
     workspaceAccess.requireWorkspaceMembership.mockResolvedValue(membership);
-    const request: Record<string, unknown> = { params: { workspaceId: 'ws-1' }, user: { userId: 'user-1' } };
+    const request: Record<string, unknown> = {
+      params: { workspaceId: 'ws-1' },
+      user: { userId: 'user-1' },
+    };
     const context = {
       getHandler: () => ({}),
       getClass: () => ({}),
@@ -79,5 +92,53 @@ describe('RolesGuard', () => {
 
     await expect(guard.canActivate(context)).resolves.toBe(true);
     expect(request.workspaceMembership).toBe(membership);
+  });
+
+  it('resolves membership via :organizationId when there is no :workspaceId', async () => {
+    reflector.getAllAndOverride.mockReturnValue([WorkspaceRole.ADMIN]);
+    workspaceAccess.requireOrganizationMembership.mockResolvedValue({
+      role: WorkspaceRole.OWNER,
+    });
+
+    await expect(
+      guard.canActivate(makeContext({ organizationId: 'org-1' }, { userId: 'user-1' })),
+    ).resolves.toBe(true);
+    expect(workspaceAccess.requireOrganizationMembership).toHaveBeenCalledWith(
+      'org-1',
+      'user-1',
+      'Organization not found.',
+    );
+  });
+
+  it('resolves membership via :projectId -> workspace when there is no :workspaceId', async () => {
+    reflector.getAllAndOverride.mockReturnValue([WorkspaceRole.MEMBER]);
+    workspaceAccess.requireProjectMembership.mockResolvedValue({
+      project: { id: 'proj-1' },
+      membership: { role: WorkspaceRole.MEMBER },
+    });
+
+    await expect(
+      guard.canActivate(makeContext({ projectId: 'proj-1' }, { userId: 'user-1' })),
+    ).resolves.toBe(true);
+    expect(workspaceAccess.requireProjectMembership).toHaveBeenCalledWith(
+      'proj-1',
+      'user-1',
+    );
+  });
+
+  it('resolves membership via :taskId -> project -> workspace when no other id is present', async () => {
+    reflector.getAllAndOverride.mockReturnValue([WorkspaceRole.ADMIN]);
+    workspaceAccess.requireTaskMembership.mockResolvedValue({
+      task: { id: 'task-1' },
+      membership: { role: WorkspaceRole.VIEWER },
+    });
+
+    await expect(
+      guard.canActivate(makeContext({ taskId: 'task-1' }, { userId: 'user-1' })),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(workspaceAccess.requireTaskMembership).toHaveBeenCalledWith(
+      'task-1',
+      'user-1',
+    );
   });
 });

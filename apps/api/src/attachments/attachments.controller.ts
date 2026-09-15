@@ -9,6 +9,7 @@ import {
   Post,
   Res,
   UploadedFile,
+  UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
@@ -23,6 +24,9 @@ import type { Response } from 'express';
 import { AttachmentsService } from './attachments.service';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { AuditLog } from '../common/decorators/audit-log.decorator';
+import { Roles } from '../common/decorators/roles.decorator';
+import { RolesGuard } from '../common/guards/roles.guard';
+import { WorkspaceRole } from '../common/enums/workspace-role.enum';
 
 @ApiTags('attachments')
 @ApiBearerAuth()
@@ -31,6 +35,8 @@ export class AttachmentsController {
   constructor(private readonly attachmentsService: AttachmentsService) {}
 
   @Post()
+  @UseGuards(RolesGuard)
+  @Roles(WorkspaceRole.MEMBER)
   @UseInterceptors(FileInterceptor('file'))
   @AuditLog('attachment.create', 'Attachment')
   @ApiConsumes('multipart/form-data')
