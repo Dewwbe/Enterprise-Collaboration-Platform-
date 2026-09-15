@@ -1,0 +1,91 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: ecp_user
+          POSTGRES_PASSWORD: ecp_password
+          POSTGRES_DB: ecp_db
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ecp_user -d ecp_db"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      NODE_ENV: test
+      DATABASE_URL: postgresql://ecp_user:ecp_password@localhost:5432/ecp_db?schema=public
+      JWT_ACCESS_SECRET: ci-only-access-secret-not-for-real-use
+      JWT_ACCESS_EXPIRES_IN: 15m
+      JWT_REFRESH_SECRET: ci-only-refresh-secret-not-for-real-use
+      JWT_REFRESH_EXPIRES_IN: 7d
+      PASSWORD_RESET_TOKEN_TTL_MINUTES: 30
+      FRONTEND_URL: http://localhost:5173
+      THROTTLE_TTL: 60
+      THROTTLE_LIMIT: 1000
+      REDIS_HOST: localhost
+      REDIS_PORT: 6379
+      SMTP_HOST: ""
+      SMTP_PORT: 587
+      SMTP_SECURE: false
+      SMTP_FROM: "ECP Platform <no-reply@ecp.local>"
+      DAILY_REMINDER_CRON: "0 8 * * *"
+      WEEKLY_SUMMARY_CRON: "0 8 * * 1"
+      UPLOAD_MAX_SIZE_MB: 10
+      UPLOAD_DIR: uploads
+      PORT: 3000
+      API_PREFIX: api/v1
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma client
+        run: npm run prisma:generate
+
+      - name: Apply database migrations
+        run: npm run prisma:deploy -w apps/api
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Unit tests
+        run: npm run test
+
+      - name: E2E tests
+        run: npm run test:e2e
+
+      - name: Build
+        run: npm run build
