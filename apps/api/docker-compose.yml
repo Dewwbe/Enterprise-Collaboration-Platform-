@@ -33,14 +33,23 @@ services:
 
   api:
     build:
-      context: .
-      dockerfile: Dockerfile
+      # The Dockerfile builds from the monorepo root (needs the root
+      # package-lock.json for npm ci), so context points two levels up even
+      # though this compose file lives in apps/api.
+      context: ../..
+      dockerfile: apps/api/Dockerfile
       target: development
     container_name: ecp-api
     restart: unless-stopped
     command: npm run start:dev
     env_file:
       - .env
+    environment:
+      # .env points at localhost:5433/localhost:6379 for host-side tooling
+      # (prisma migrate, local test runs); from inside this container those
+      # must resolve to the compose service names instead.
+      DATABASE_URL: postgresql://ecp_user:ecp_password@postgres:5432/ecp_db?schema=public
+      REDIS_HOST: redis
     ports:
       - "3000:3000"
     depends_on:
@@ -49,8 +58,8 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - ./src:/app/src
-      - ./prisma:/app/prisma
+      - ./src:/repo/apps/api/src
+      - ./prisma:/repo/apps/api/prisma
 
 volumes:
   ecp_postgres_data:

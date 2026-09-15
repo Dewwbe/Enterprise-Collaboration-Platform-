@@ -12,7 +12,7 @@ jobs:
 
     services:
       postgres:
-        image: postgres:16-alpine
+        image: postgres@sha256:cf78e76683b9ca8c5733cbbdce6c9262b45b6767934dd0a95e671f9a0fc20685 # 16-alpine
         env:
           POSTGRES_USER: ecp_user
           POSTGRES_PASSWORD: ecp_password
@@ -26,7 +26,7 @@ jobs:
           --health-retries 10
 
       redis:
-        image: redis:7-alpine
+        image: redis@sha256:ff02b58f971e7d7d156a1267e283fcbbeee91773b6aa36c49dac28ecfe28eadf # 7-alpine
         ports:
           - 6379:6379
         options: >-
@@ -58,13 +58,20 @@ jobs:
       UPLOAD_DIR: uploads
       PORT: 3000
       API_PREFIX: api/v1
+      # Job-level so step `if:` conditions can read it via env.SONAR_TOKEN -
+      # the secrets context isn't a valid named-value inside an `if:` expression.
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          # SonarCloud's analysis (new-code detection, SCM blame) needs full
+          # history, not the default shallow clone.
+          fetch-depth: 0
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 20
           cache: npm
@@ -81,11 +88,17 @@ jobs:
       - name: Lint
         run: npm run lint
 
-      - name: Unit tests
-        run: npm run test
+      - name: Unit tests (with coverage)
+        run: npm run test:cov
 
       - name: E2E tests
         run: npm run test:e2e
 
       - name: Build
         run: npm run build
+
+      - name: SonarCloud Scan
+        # Skipped until a SONAR_TOKEN repo secret exists (see sonar-project.properties)
+        # so setup order never turns CI red.
+        if: ${{ env.SONAR_TOKEN != '' }}
+        uses: SonarSource/sonarqube-scan-action@689fb39b34b9aa95ebc5f8f119343ddd51542402 # v4

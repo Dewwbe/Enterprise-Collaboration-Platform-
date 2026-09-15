@@ -36,14 +36,20 @@ services:
 
   api:
     build:
-      context: ./apps/api
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: apps/api/Dockerfile
       target: development
     container_name: ecp-api
     restart: unless-stopped
     command: npm run start:dev
     env_file:
       - ./apps/api/.env
+    environment:
+      # apps/api/.env points at localhost:5433/localhost:6379 for host-side
+      # tooling (prisma migrate, local test runs); from inside this
+      # container those must resolve to the compose service names instead.
+      DATABASE_URL: postgresql://ecp_user:ecp_password@postgres:5432/ecp_db?schema=public
+      REDIS_HOST: redis
     ports:
       - "3000:3000"
     depends_on:
@@ -52,8 +58,8 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - ./apps/api/src:/app/src
-      - ./apps/api/prisma:/app/prisma
+      - ./apps/api/src:/repo/apps/api/src
+      - ./apps/api/prisma:/repo/apps/api/prisma
 
   web:
     build:
