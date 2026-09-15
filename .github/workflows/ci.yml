@@ -58,6 +58,9 @@ jobs:
       UPLOAD_DIR: uploads
       PORT: 3000
       API_PREFIX: api/v1
+      # Job-level so step `if:` conditions can read it via env.SONAR_TOKEN -
+      # the secrets context isn't a valid named-value inside an `if:` expression.
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
 
     steps:
       - name: Checkout
@@ -97,7 +100,5 @@ jobs:
       - name: SonarCloud Scan
         # Skipped until a SONAR_TOKEN repo secret exists (see sonar-project.properties)
         # so setup order never turns CI red.
-        if: ${{ secrets.SONAR_TOKEN != '' }}
+        if: ${{ env.SONAR_TOKEN != '' }}
         uses: SonarSource/sonarqube-scan-action@v4
-        env:
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
