@@ -62,6 +62,10 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          # SonarCloud's analysis (new-code detection, SCM blame) needs full
+          # history, not the default shallow clone.
+          fetch-depth: 0
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -81,11 +85,19 @@ jobs:
       - name: Lint
         run: npm run lint
 
-      - name: Unit tests
-        run: npm run test
+      - name: Unit tests (with coverage)
+        run: npm run test:cov
 
       - name: E2E tests
         run: npm run test:e2e
 
       - name: Build
         run: npm run build
+
+      - name: SonarCloud Scan
+        # Skipped until a SONAR_TOKEN repo secret exists (see sonar-project.properties)
+        # so setup order never turns CI red.
+        if: ${{ secrets.SONAR_TOKEN != '' }}
+        uses: SonarSource/sonarqube-scan-action@v4
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
