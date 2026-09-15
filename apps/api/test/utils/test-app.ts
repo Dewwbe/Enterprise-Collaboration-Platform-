@@ -1,5 +1,6 @@
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
+import { randomUUID } from 'crypto';
 import * as request from 'supertest';
 import { AppModule } from '../../src/app.module';
 import { PrismaService } from '../../src/prisma/prisma.service';
@@ -39,7 +40,9 @@ export async function registerUser(
   app: INestApplication,
   emailPrefix: string,
 ): Promise<TestUser> {
-  const email = `${emailPrefix}-${Date.now()}-${Math.random().toString(36).slice(2)}@example.com`;
+  // A UUID alone is already unique; a Date.now() prefix too would push some
+  // emailPrefix values past the 64-char local-part limit @IsEmail() enforces.
+  const email = `${emailPrefix}-${randomUUID()}@example.com`;
   const res = await request(app.getHttpServer())
     .post('/api/v1/auth/register')
     .send({ email, password: 'Str0ngP@ssword!', firstName: 'Test', lastName: 'User' })
