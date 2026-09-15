@@ -10,6 +10,7 @@ import {
   Patch,
   Post,
   Query,
+  UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { TasksService } from './tasks.service';
@@ -18,6 +19,9 @@ import { UpdateTaskDto } from './dto/update-task.dto';
 import { QueryTasksDto } from './dto/query-tasks.dto';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { AuditLog } from '../common/decorators/audit-log.decorator';
+import { Roles } from '../common/decorators/roles.decorator';
+import { RolesGuard } from '../common/guards/roles.guard';
+import { WorkspaceRole } from '../common/enums/workspace-role.enum';
 
 @ApiTags('tasks')
 @ApiBearerAuth()
@@ -26,6 +30,8 @@ export class TasksController {
   constructor(private readonly tasksService: TasksService) {}
 
   @Post()
+  @UseGuards(RolesGuard)
+  @Roles(WorkspaceRole.MEMBER)
   @AuditLog('task.create', 'Task')
   @ApiOperation({ summary: 'Create a task in a project (MEMBER or above)' })
   create(
@@ -60,6 +66,8 @@ export class TasksController {
   }
 
   @Patch(':taskId')
+  @UseGuards(RolesGuard)
+  @Roles(WorkspaceRole.MEMBER)
   @AuditLog('task.update', 'Task', 'taskId')
   @ApiOperation({
     summary: 'Update a task (MEMBER or above)',
@@ -76,6 +84,8 @@ export class TasksController {
   }
 
   @Delete(':taskId')
+  @UseGuards(RolesGuard)
+  @Roles(WorkspaceRole.ADMIN)
   @HttpCode(HttpStatus.NO_CONTENT)
   @AuditLog('task.delete', 'Task', 'taskId')
   @ApiOperation({ summary: 'Delete a task (ADMIN or OWNER only)' })
