@@ -18,7 +18,12 @@ COPY apps/api/prisma apps/api/prisma
 
 # ---- Development ----
 FROM base AS development
-RUN npm ci
+# --ignore-scripts blocks arbitrary install/postinstall scripts from any of
+# the ~800 transitive deps; bcrypt is the one package that legitimately
+# needs its own (fetches/builds its native binding), so rebuild just that
+# one explicitly instead of trusting every package's install script.
+RUN npm ci --ignore-scripts
+RUN npm rebuild bcrypt
 RUN npm run prisma:generate
 COPY . .
 WORKDIR /repo/apps/api
@@ -27,7 +32,8 @@ CMD ["npm", "run", "start:dev"]
 
 # ---- Build ----
 FROM base AS build
-RUN npm ci
+RUN npm ci --ignore-scripts
+RUN npm rebuild bcrypt
 COPY . .
 RUN npm run prisma:generate
 RUN npm run build -w apps/api
@@ -44,10 +50,16 @@ COPY apps/api/prisma apps/api/prisma
 # prisma generate needs the (dev-only) prisma CLI; prune it out afterwards so
 # the final image only keeps the generated @prisma/client output plus
 # whatever production dependencies actually need to run.
-RUN npm ci
+RUN npm ci --ignore-scripts
+RUN npm rebuild bcrypt
 RUN npm run prisma:generate
 RUN npm prune --omit=dev
 COPY --from=build /repo/apps/api/dist ./apps/api/dist
+# node:alpine's built-in non-root "node" user - avoids running the actual
+# server process as root. chown after all root-owned COPY/RUN steps above,
+# then drop privileges for good right before the app starts.
+RUN chown -R node:node /repo
+USER node
 WORKDIR /repo/apps/api
 EXPOSE 3000
 # nest-cli.json's sourceRoot ("src") means tsc preserves that prefix in
