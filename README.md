@@ -14,11 +14,14 @@ ecp-platform/
   package.json            # npm workspaces root
 ```
 
-Only `apps/api` is functionally complete (Week 1-2 scope: Auth, Organizations,
-Workspaces, Database). `apps/web` is a working thin client against it
-(login/register/dashboard) meant to support the project walkthrough demo and
-to grow alongside the backend in later weeks — see `docs/PROJECT_PLAN.md`
-inside `apps/api` for what's coming.
+`apps/api` implements the full core feature set: Auth (incl. password reset),
+Organizations, Workspaces, Projects, Tasks, Comments, Attachments,
+Notifications (WebSocket + email), Audit Logs, Redis caching, and BullMQ
+background jobs — see `apps/api/README.md` for the full API surface and
+`apps/api/docs/ARCHITECTURE.md` for the design. `apps/web` is a working thin
+client against it (login/register/dashboard) meant to support the project
+walkthrough demo. Remaining gaps (documentation polish, e2e coverage, bonus
+features) are tracked in `apps/api/docs/PROJECT_PLAN.md`.
 
 ## Why a monorepo (Turborepo)
 

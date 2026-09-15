@@ -38,7 +38,9 @@ async function bootstrap() {
   const swaggerConfig = new DocumentBuilder()
     .setTitle('Enterprise Collaboration Platform API')
     .setDescription(
-      'Phase 4 Capstone backend - Authentication, Organizations, and Workspaces (Week 1-2 scope).',
+      'Phase 4 Capstone backend - Auth (incl. password reset), Organizations, Workspaces, ' +
+        'Projects, Tasks, Comments, Attachments, Notifications (WebSocket + email), and Audit Logs, ' +
+        'with workspace-scoped RBAC, Redis caching, and BullMQ background jobs.',
     )
     .setVersion('1.0')
     .addBearerAuth()
