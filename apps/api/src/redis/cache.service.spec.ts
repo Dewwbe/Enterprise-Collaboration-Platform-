@@ -4,10 +4,22 @@ import { REDIS_CLIENT } from './redis.constants';
 
 describe('CacheService', () => {
   let service: CacheService;
-  let redis: { get: jest.Mock; set: jest.Mock; del: jest.Mock; scan: jest.Mock };
+  let redis: {
+    get: jest.Mock;
+    set: jest.Mock;
+    del: jest.Mock;
+    scan: jest.Mock;
+    quit: jest.Mock;
+  };
 
   beforeEach(async () => {
-    redis = { get: jest.fn(), set: jest.fn(), del: jest.fn(), scan: jest.fn() };
+    redis = {
+      get: jest.fn(),
+      set: jest.fn(),
+      del: jest.fn(),
+      scan: jest.fn(),
+      quit: jest.fn(),
+    };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [CacheService, { provide: REDIS_CLIENT, useValue: redis }],
@@ -61,6 +73,14 @@ describe('CacheService', () => {
       expect(redis.scan).toHaveBeenCalledTimes(2);
       expect(redis.del).toHaveBeenCalledWith('a:1', 'a:2');
       expect(redis.del).toHaveBeenCalledWith('a:3');
+    });
+  });
+
+  describe('onModuleDestroy', () => {
+    it('quits the underlying Redis connection', async () => {
+      await service.onModuleDestroy();
+
+      expect(redis.quit).toHaveBeenCalled();
     });
   });
 });

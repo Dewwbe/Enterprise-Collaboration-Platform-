@@ -1,4 +1,4 @@
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
 import Redis from 'ioredis';
 import { REDIS_CLIENT } from './redis.constants';
 
@@ -8,10 +8,18 @@ import { REDIS_CLIENT } from './redis.constants';
  * propagated, since caching must never be why a request fails.
  */
 @Injectable()
-export class CacheService {
+export class CacheService implements OnModuleDestroy {
   private readonly logger = new Logger(CacheService.name);
 
   constructor(@Inject(REDIS_CLIENT) private readonly redis: Redis) {}
+
+  // Without this, the raw ioredis connection outlives app.close() (it has no
+  // lifecycle hook of its own), which keeps the event loop alive - harmless
+  // in the running server, but it leaves e2e test runs hanging after every
+  // test has already passed.
+  async onModuleDestroy(): Promise<void> {
+    await this.redis.quit();
+  }
 
   async get<T>(key: string): Promise<T | null> {
     try {
