@@ -1,14 +1,27 @@
+# Builds from the monorepo root (see docker-compose.yml's context: .) so npm ci
+# can see the workspace-wide package-lock.json - apps/api alone has no lockfile
+# of its own, since this is an npm workspaces monorepo with a single root one.
+
 # ---- Base ----
-FROM node:20-alpine AS base
-WORKDIR /app
+FROM node:20-alpine@sha256:fb4cd12c85ee03686f6af5362a0b0d56d50c58a04632e6c0fb8363f609372293 AS base
+# Prisma's runtime shells out to `openssl` to detect which engine binary to
+# load; this Alpine base has no openssl CLI at all (not just an old one), so
+# without it Prisma silently guesses wrong and fails at startup, not at build
+# time. See binaryTargets in prisma/schema.prisma for the matching half of
+# this fix.
+RUN apk add --no-cache openssl
+WORKDIR /repo
 COPY package*.json ./
-COPY prisma ./prisma
+COPY apps/api/package*.json apps/api/
+COPY packages/shared-types/package*.json packages/shared-types/
+COPY apps/api/prisma apps/api/prisma
 
 # ---- Development ----
 FROM base AS development
-RUN npm install
-RUN npx prisma generate
+RUN npm ci
+RUN npm run prisma:generate
 COPY . .
+WORKDIR /repo/apps/api
 EXPOSE 3000
 CMD ["npm", "run", "start:dev"]
 
@@ -16,17 +29,27 @@ CMD ["npm", "run", "start:dev"]
 FROM base AS build
 RUN npm ci
 COPY . .
-RUN npx prisma generate
-RUN npm run build
+RUN npm run prisma:generate
+RUN npm run build -w apps/api
 
 # ---- Production ----
-FROM node:20-alpine AS production
-WORKDIR /app
+FROM node:20-alpine@sha256:fb4cd12c85ee03686f6af5362a0b0d56d50c58a04632e6c0fb8363f609372293 AS production
+RUN apk add --no-cache openssl
+WORKDIR /repo
 ENV NODE_ENV=production
 COPY package*.json ./
-RUN npm ci --omit=dev
-COPY --from=build /app/dist ./dist
-COPY --from=build /app/prisma ./prisma
-RUN npx prisma generate
+COPY apps/api/package*.json apps/api/
+COPY packages/shared-types/package*.json packages/shared-types/
+COPY apps/api/prisma apps/api/prisma
+# prisma generate needs the (dev-only) prisma CLI; prune it out afterwards so
+# the final image only keeps the generated @prisma/client output plus
+# whatever production dependencies actually need to run.
+RUN npm ci
+RUN npm run prisma:generate
+RUN npm prune --omit=dev
+COPY --from=build /repo/apps/api/dist ./apps/api/dist
+WORKDIR /repo/apps/api
 EXPOSE 3000
-CMD ["node", "dist/main"]
+# nest-cli.json's sourceRoot ("src") means tsc preserves that prefix in
+# outDir - the real entry point is dist/src/main.js, not dist/main.js.
+CMD ["node", "dist/src/main"]
