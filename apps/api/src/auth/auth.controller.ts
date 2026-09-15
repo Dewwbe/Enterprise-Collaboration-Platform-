@@ -4,6 +4,8 @@ import { AuthService } from './auth.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
+import { RequestPasswordResetDto } from './dto/request-password-reset.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
 import { AuthResponseDto } from './dto/auth-response.dto';
 import { Public } from '../common/decorators/public.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
@@ -49,5 +51,28 @@ export class AuthController {
   @ApiOperation({ summary: 'Revoke all active refresh tokens for the user' })
   async logout(@CurrentUser() user: { userId: string }): Promise<void> {
     await this.authService.logoutAll(user.userId);
+  }
+
+  @Public()
+  @Post('password-reset/request')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({
+    summary: 'Request a password reset email',
+    description:
+      'Always returns 204 regardless of whether the email is registered, so this endpoint cannot be used to enumerate accounts.',
+  })
+  async requestPasswordReset(@Body() dto: RequestPasswordResetDto): Promise<void> {
+    await this.authService.requestPasswordReset(dto.email);
+  }
+
+  @Public()
+  @Post('password-reset/confirm')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({
+    summary: 'Reset a password using a token from the reset email',
+    description: 'Also revokes all of the account\'s active refresh tokens.',
+  })
+  async resetPassword(@Body() dto: ResetPasswordDto): Promise<void> {
+    await this.authService.resetPassword(dto.token, dto.newPassword);
   }
 }

@@ -11,6 +11,7 @@ import { WorkspaceRole } from '../common/enums/workspace-role.enum';
 import { TaskStatus } from '../common/enums/task-status.enum';
 import { TASK_ASSIGNED_EVENT, TASK_COMPLETED_EVENT } from '../common/events';
 import { CacheService } from '../redis/cache.service';
+import { WorkspaceAccessService } from '../common/access/workspace-access.service';
 
 describe('TasksService', () => {
   let service: TasksService;
@@ -48,6 +49,7 @@ describe('TasksService', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         TasksService,
+        WorkspaceAccessService,
         { provide: PrismaService, useValue: prisma },
         { provide: EventEmitter2, useValue: eventEmitter },
         { provide: CacheService, useValue: cache },
@@ -125,6 +127,7 @@ describe('TasksService', () => {
         TASK_ASSIGNED_EVENT,
         expect.objectContaining({ taskId: 'task-1', assigneeId: 'user-2' }),
       );
+      expect(cache.del).toHaveBeenCalledWith('dashboard:user-2');
     });
 
     it('does not emit TaskAssignedEvent when created without an assignee', async () => {
@@ -225,6 +228,34 @@ describe('TasksService', () => {
         service.update('user-1', 'proj-1', 'task-1', { status: TaskStatus.TODO }),
       ).rejects.toBeInstanceOf(BadRequestException);
     });
+
+    it('invalidates both the old and new assignee dashboard on reassignment', async () => {
+      const assignedTask = { ...baseTask, assigneeId: 'user-old' };
+      prisma.task.findUnique.mockResolvedValue(assignedTask);
+      prisma.workspaceMember.findUnique.mockResolvedValue({ role: WorkspaceRole.MEMBER });
+      prisma.task.update.mockResolvedValue({ ...assignedTask, assigneeId: 'user-new' });
+
+      await service.update('user-1', 'proj-1', 'task-1', { assigneeId: 'user-new' });
+
+      expect(cache.del).toHaveBeenCalledWith('dashboard:user-new');
+      expect(cache.del).toHaveBeenCalledWith('dashboard:user-old');
+    });
+
+    it("invalidates the assignee's dashboard on a status change", async () => {
+      const assignedTask = { ...baseTask, assigneeId: 'user-1' };
+      prisma.task.findUnique.mockResolvedValue(assignedTask);
+      prisma.workspaceMember.findUnique.mockResolvedValue({ role: WorkspaceRole.MEMBER });
+      prisma.task.update.mockResolvedValue({
+        ...assignedTask,
+        status: TaskStatus.IN_PROGRESS,
+      });
+
+      await service.update('user-1', 'proj-1', 'task-1', {
+        status: TaskStatus.IN_PROGRESS,
+      });
+
+      expect(cache.del).toHaveBeenCalledWith('dashboard:user-1');
+    });
   });
 
   describe('remove', () => {
@@ -246,6 +277,7 @@ describe('TasksService', () => {
       prisma.task.findUnique.mockResolvedValue({
         id: 'task-1',
         projectId: 'proj-1',
+        assigneeId: 'user-2',
         project: { workspaceId: 'ws-1' },
       });
       prisma.workspaceMember.findUnique.mockResolvedValue({ role: WorkspaceRole.ADMIN });
@@ -254,6 +286,7 @@ describe('TasksService', () => {
 
       expect(prisma.task.delete).toHaveBeenCalledWith({ where: { id: 'task-1' } });
       expect(cache.del).toHaveBeenCalledWith('workspace-stats:ws-1');
+      expect(cache.del).toHaveBeenCalledWith('dashboard:user-2');
     });
 
     it('throws NotFoundException for a task outside the given project', async () => {

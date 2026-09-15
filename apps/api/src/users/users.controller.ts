@@ -15,6 +15,16 @@ export class UsersController {
     return this.usersService.findById(userId);
   }
 
+  @Get('me/dashboard')
+  @ApiOperation({
+    summary: "Get the caller's personal dashboard",
+    description:
+      'Workspace/project counts, assigned-task counts by status, overdue tasks, and recent tasks. Cached for 60s.',
+  })
+  dashboard(@CurrentUser('userId') userId: string) {
+    return this.usersService.getDashboard(userId);
+  }
+
   @Get('lookup')
   @ApiOperation({ summary: 'Look up a user by email (for inviting to org/workspace)' })
   lookup(@Query('email') email: string) {

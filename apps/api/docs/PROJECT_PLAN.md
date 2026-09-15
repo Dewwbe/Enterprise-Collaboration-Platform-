@@ -11,6 +11,23 @@ satisfies. Bonus features are slotted where they naturally attach to the
 underlying feature, not all crammed at the end, so they're actually buildable
 rather than bolted on in Week 8.
 
+## Current status (as of 2026-09-15)
+
+Weeks 1–6 are delivered, including Attachments (originally slotted for Week
+7–8) and the RBAC hardening this plan called for in Week 3–4 (implemented as
+a generic `resolveMembership` method directly on `RolesGuard` rather than a
+separate `WorkspaceScopeResolver` provider — same effect, fewer moving
+parts; see [`adr/0001-rbac-strategy.md`](adr/0001-rbac-strategy.md)).
+Documentation finalization (ER/architecture/sequence diagrams, ADRs, this
+status update) is also done.
+
+Still open from Week 3–4 / 7–8:
+- Soft delete and restore for `Task`/`Comment`/`Attachment` (bonus)
+- GitHub Actions CI pipeline
+- Health/metrics endpoints (`@nestjs/terminus`)
+- Full-text search, project templates, user activity dashboard, per-route throttle overrides, OpenTelemetry, Docker production profile (all bonus)
+- Coverage-gap fill toward the 80% target and an authorization-matrix test pass
+
 ---
 
 ## Week 1–2 — Authentication, Workspace, Organization, Database ✅ delivered
@@ -32,7 +49,7 @@ rather than bolted on in Week 8.
 
 ---
 
-## Week 3–4 — Projects, Tasks, Comments, RBAC hardening
+## Week 3–4 — Projects, Tasks, Comments, RBAC hardening ✅ delivered (soft delete bonus still open)
 **Branches:** `feature/projects-module`, `feature/tasks-module`, `feature/comments-module`,
 `feature/rbac-workspace-scoping-audit`
 
@@ -55,7 +72,7 @@ rather than bolted on in Week 8.
 
 ---
 
-## Week 5–6 — Notifications, Redis, BullMQ, Audit Logs
+## Week 5–6 — Notifications, Redis, BullMQ, Audit Logs ✅ delivered
 **Branches:** `feature/event-bus`, `feature/notifications-module`, `feature/bullmq-workers`,
 `feature/redis-caching`, `feature/audit-log-interceptor`
 

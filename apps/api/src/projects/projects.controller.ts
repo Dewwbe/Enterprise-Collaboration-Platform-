@@ -43,7 +43,10 @@ export class ProjectsController {
   }
 
   @Get()
-  @ApiOperation({ summary: 'List projects in a workspace' })
+  @ApiOperation({
+    summary: 'List projects in a workspace',
+    description: 'Supports ?search=&includeArchived=&page=&limit=',
+  })
   findAll(
     @CurrentUser('userId') userId: string,
     @Param('workspaceId', ParseUUIDPipe) workspaceId: string,

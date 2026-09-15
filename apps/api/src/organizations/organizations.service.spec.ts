@@ -5,6 +5,7 @@ import { OrganizationsService } from './organizations.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { WorkspaceRole } from '../common/enums/workspace-role.enum';
 import { USER_INVITED_EVENT } from '../common/events';
+import { WorkspaceAccessService } from '../common/access/workspace-access.service';
 
 describe('OrganizationsService', () => {
   let service: OrganizationsService;
@@ -38,6 +39,7 @@ describe('OrganizationsService', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         OrganizationsService,
+        WorkspaceAccessService,
         { provide: PrismaService, useValue: prisma },
         { provide: EventEmitter2, useValue: eventEmitter },
       ],

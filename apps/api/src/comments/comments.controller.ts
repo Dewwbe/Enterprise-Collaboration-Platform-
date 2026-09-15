@@ -9,6 +9,7 @@ import {
   ParseUUIDPipe,
   Patch,
   Post,
+  UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { CommentsService } from './comments.service';
@@ -16,6 +17,9 @@ import { CreateCommentDto } from './dto/create-comment.dto';
 import { UpdateCommentDto } from './dto/update-comment.dto';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { AuditLog } from '../common/decorators/audit-log.decorator';
+import { Roles } from '../common/decorators/roles.decorator';
+import { RolesGuard } from '../common/guards/roles.guard';
+import { WorkspaceRole } from '../common/enums/workspace-role.enum';
 
 @ApiTags('comments')
 @ApiBearerAuth()
@@ -24,6 +28,8 @@ export class CommentsController {
   constructor(private readonly commentsService: CommentsService) {}
 
   @Post()
+  @UseGuards(RolesGuard)
+  @Roles(WorkspaceRole.MEMBER)
   @AuditLog('comment.create', 'Comment')
   @ApiOperation({ summary: 'Add a comment to a task (MEMBER or above)' })
   create(

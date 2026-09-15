@@ -1,58 +1,54 @@
 # Enterprise Collaboration Platform — Backend (Phase 4 Capstone)
 
 A production-shaped NestJS backend for a multi-tenant collaboration platform
-(Notion/ClickUp/Jira-style). This repository currently implements the
-**Week 1–2 scope**: Authentication, Organizations, Workspaces, and the
-foundational database schema. See [`docs/PROJECT_PLAN.md`](docs/PROJECT_PLAN.md)
-for the full 8-week roadmap and [`docs/GIT_WORKFLOW.md`](docs/GIT_WORKFLOW.md)
-for branching conventions.
+(Notion/ClickUp/Jira-style). Auth, Organizations, Workspaces, Projects,
+Tasks, Comments, Attachments, Notifications, and Audit Logs are all
+implemented, backed by Redis caching and BullMQ background jobs. See
+[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the module map and design
+rationale, [`docs/ER_DIAGRAM.md`](docs/ER_DIAGRAM.md) for the data model,
+[`docs/adr/`](docs/adr) for key design decisions, and
+[`docs/GIT_WORKFLOW.md`](docs/GIT_WORKFLOW.md) for branching conventions.
 
 ## Tech stack
 
-| Concern        | Choice                          |
-|-----------------|----------------------------------|
-| Framework       | NestJS 10 (TypeScript)          |
-| Database        | PostgreSQL + Prisma ORM         |
-| Auth            | JWT (access + rotating refresh) |
-| Password hashing| bcrypt                          |
-| Validation      | class-validator / class-transformer |
-| Docs            | Swagger / OpenAPI (`/docs`)     |
-| Testing         | Jest + Supertest                |
-| Containerization| Docker Compose                  |
-| Queue/Cache (Week 5–6+) | Redis + BullMQ          |
+| Concern         | Choice                               |
+|------------------|----------------------------------------|
+| Framework        | NestJS 10 (TypeScript)                |
+| Database         | PostgreSQL + Prisma ORM               |
+| Auth             | JWT (access + rotating refresh), password reset |
+| Password hashing | bcrypt                                |
+| Validation       | class-validator / class-transformer   |
+| Queue            | BullMQ (Redis-backed)                 |
+| Cache            | Redis                                 |
+| Realtime         | WebSocket (Socket.IO gateway)         |
+| Docs             | Swagger / OpenAPI (`/docs`)           |
+| Testing          | Jest + Supertest                      |
+| Containerization | Docker Compose                        |
 
 ## Architecture
 
-Clean Architecture / SOLID, module-per-domain:
-
-```
-src/
-  common/            # cross-cutting: guards, decorators, filters, interceptors, enums
-  config/            # typed configuration loader
-  prisma/            # PrismaService (DB access), global module
-  auth/              # register, login, refresh rotation, logout
-  users/             # profile / lookup
-  organizations/     # org CRUD + membership
-  workspaces/        # workspace CRUD + membership, RBAC-guarded routes
-```
-
-Controllers contain no business logic — they validate input (DTO +
-`ValidationPipe`) and delegate to services. Services own all business rules
-and talk to Prisma directly (repository-style access is intentionally kept
-thin at this scale; a repository layer can be introduced later without
-touching controllers).
+Clean Architecture / SOLID, module-per-domain. Controllers contain no
+business logic — they validate input (DTO + global `ValidationPipe`) and
+delegate to services; services own all business rules and talk to Prisma
+directly. Full breakdown, the RBAC resolution flow, and the event-driven
+notification pipeline are diagrammed in
+[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
 ### AuthN / AuthZ
 
 - **Authentication**: `JwtAuthGuard` is registered globally (`APP_GUARD`), so
   every route requires a valid access token unless explicitly marked
-  `@Public()` (used by `register`, `login`, `refresh`).
+  `@Public()` (used by `register`, `login`, `refresh`, `password-reset/*`).
 - **Authorization**: workspace-level RBAC (`OWNER > ADMIN > MEMBER > VIEWER`)
-  is enforced by `RolesGuard` + `@Roles(...)`, scoped to a `:workspaceId`
-  route param. Organization-level authorization is checked directly in
-  `OrganizationsService` since organization routes don't carry a workspace id.
-- **Refresh tokens** are never stored raw — only a bcrypt hash — and rotate on
-  every use (the presented token is revoked when a new pair is issued).
+  is enforced by `RolesGuard` + `@Roles(...)` on every controller
+  (workspaces, projects, tasks, comments, attachments, organizations). The
+  guard resolves the caller's role from whichever route param identifies the
+  resource, walking the join chain (`task -> project -> workspace`, etc.) via
+  `WorkspaceAccessService` — see
+  [`docs/adr/0001-rbac-strategy.md`](docs/adr/0001-rbac-strategy.md) for why.
+- **Refresh tokens** are never stored raw — only a bcrypt hash — and rotate
+  on every use (the presented token is revoked when a new pair is issued).
+  **Password reset tokens** are single-use, hashed, and short-lived.
 
 ### Error & response shape
 
@@ -60,6 +56,8 @@ touching controllers).
   `{ success: false, statusCode, path, timestamp, message, error? }`
 - Every success response is wrapped by `TransformInterceptor`:
   `{ success: true, statusCode, data }`
+- Every mutating route decorated `@AuditLog(...)` is captured by the global
+  `AuditLogInterceptor`.
 
 ## Getting started
 
@@ -100,8 +98,8 @@ docker compose up --build
 ### 5. Tests
 ```bash
 npm run test          # unit tests
-npm run test:cov       # unit tests + coverage report
-npm run test:e2e       # e2e (requires DB reachable via DATABASE_URL)
+npm run test:cov      # unit tests + coverage report
+npm run test:e2e      # e2e (requires DB + Redis reachable, see .env)
 ```
 
 ## Seeded demo accounts
@@ -110,41 +108,84 @@ npm run test:e2e       # e2e (requires DB reachable via DATABASE_URL)
 | owner@ecp.dev     | Str0ngP@ssword!     | OWNER                        |
 | member@ecp.dev    | Str0ngP@ssword!     | MEMBER                       |
 
-## API surface (Week 1–2)
+## API surface
+
+Full request/response schemas are in Swagger at `/docs` once the server is
+running. Summary by resource:
 
 **Auth** (`/api/v1/auth`)
-- `POST /register` — create account, returns token pair
-- `POST /login` — returns token pair
-- `POST /refresh` — rotates a refresh token
-- `POST /logout` — revokes the presented refresh token
+- `POST /register` · `POST /login` · `POST /refresh` · `POST /logout`
+- `POST /password-reset/request` · `POST /password-reset/confirm`
 
 **Users** (`/api/v1/users`)
-- `GET /me` — caller's profile
-- `GET /lookup?email=` — find a user to invite
-- `GET /:id` — profile by id
+- `GET /me` — caller's profile · `GET /me/dashboard` — cached personal dashboard
+- `GET /lookup?email=` — find a user to invite · `GET /:id` — profile by id
 
 **Organizations** (`/api/v1/organizations`)
-- `POST /` · `GET /` · `GET /:id` · `PATCH /:id` · `POST /:id/archive` · `DELETE /:id`
-- `POST /:id/members` — invite/update a member's org role
+- `POST /` · `GET /` · `GET /:organizationId` · `PATCH /:organizationId` (ADMIN+)
+- `POST /:organizationId/archive` (OWNER) · `DELETE /:organizationId` (OWNER)
+- `POST /:organizationId/members` (ADMIN+)
 
 **Workspaces** (`/api/v1/workspaces`)
-- `POST /` · `GET /` · `GET /:workspaceId` · `PATCH /:workspaceId` (ADMIN+)
-- `POST /:workspaceId/archive` (OWNER) · `DELETE /:workspaceId` (OWNER)
+- `POST /` · `GET /` · `GET /:workspaceId` · `GET /:workspaceId/stats` (cached)
+- `PATCH /:workspaceId` (ADMIN+) · `POST /:workspaceId/archive` (OWNER) · `DELETE /:workspaceId` (OWNER)
 - `POST /:workspaceId/members` (ADMIN+)
 
-Full request/response schemas are in Swagger at `/docs` once the server is running.
+**Projects** (`/api/v1/workspaces/:workspaceId/projects`)
+- `POST /` (MEMBER+) · `GET /?search=&includeArchived=&page=&limit=` · `GET /:projectId`
+- `PATCH /:projectId` (ADMIN+) · `POST /:projectId/archive` (ADMIN+) · `POST /:projectId/restore` (ADMIN+)
+- `DELETE /:projectId` (OWNER)
 
-## Security checklist implemented this phase
+**Tasks** (`/api/v1/projects/:projectId/tasks`)
+- `POST /` (MEMBER+) · `GET /?status=&priority=&assigneeId=&sort=&page=&limit=` · `GET /:taskId`
+- `PATCH /:taskId` (MEMBER+) — status must follow `TODO -> IN_PROGRESS -> REVIEW -> DONE`
+- `DELETE /:taskId` (ADMIN+)
+
+**Comments** (`/api/v1/tasks/:taskId/comments`)
+- `POST /` (MEMBER+) · `GET /` · `PATCH /:commentId` (own comment only) · `DELETE /:commentId` (own comment only)
+
+**Attachments** (`/api/v1/tasks/:taskId/attachments`)
+- `POST /` (MEMBER+, multipart) — size/MIME validated server-side · `GET /`
+- `GET /:attachmentId/download` · `DELETE /:attachmentId` (uploader, or ADMIN+)
+
+**Notifications** (`/api/v1/notifications`)
+- `GET /` — paginated, own notifications · `PATCH /:id/read`
+- Also pushed live over WebSocket (`NotificationsGateway`) as they're created.
+
+## Async architecture
+
+Feature services emit domain events (`TaskAssignedEvent`, `TaskCompletedEvent`,
+`CommentAddedEvent`, `UserInvitedEvent`) rather than calling the notification
+stack directly. `NotificationEventsListener` turns each into a BullMQ job;
+`NotificationDeliveryProcessor` persists the `Notification` row, pushes it
+over WebSocket, and emails the two types where that matters
+(`TASK_ASSIGNED`, `USER_INVITED`). Scheduled BullMQ repeat-cron jobs cover
+daily due-date reminders, weekly summaries, and expired-token cleanup, all
+retried on failure via BullMQ's backoff. Full sequence diagram:
+[`docs/SEQUENCE_DIAGRAM.md`](docs/SEQUENCE_DIAGRAM.md).
+
+## Caching
+
+Redis-backed `CacheService` covers a user's personal dashboard, a user's
+profile, and per-workspace stats — each explicitly invalidated by the write
+paths that can change them (task/project mutations, membership changes)
+rather than relying on TTL alone.
+
+## Security checklist implemented
+
 - [x] Passwords hashed with bcrypt (cost factor 12), never logged or returned
 - [x] JWT access tokens short-lived (15m default); refresh tokens rotate and are hashed at rest
+- [x] Password reset tokens are single-use, hashed, short-lived
 - [x] Global `ValidationPipe` with `whitelist` + `forbidNonWhitelisted` (rejects unexpected fields)
-- [x] `helmet()` security headers
+- [x] `helmet()` security headers, CORS configured
 - [x] Global rate limiting via `@nestjs/throttler`
 - [x] Generic "invalid email or password" message (no user-enumeration via login)
-- [x] Organization/workspace lookups return 404 (not 403) to non-members, avoiding ID enumeration
-- [x] RBAC enforced server-side on every mutating route, never trusted from the client
+- [x] Organization/workspace/project/task lookups return 404 (not 403) to non-members, avoiding ID enumeration
+- [x] RBAC enforced server-side on every mutating route via `RolesGuard`, never trusted from the client
+- [x] File uploads validated by size and MIME type; stored under randomized keys, never the client-supplied filename
 
-## Roadmap
-See [`docs/PROJECT_PLAN.md`](docs/PROJECT_PLAN.md) for Weeks 3–8 (Projects/Tasks/Comments,
-Notifications, BullMQ, Redis caching, Audit Logs, testing hardening, and all
-requested bonus features).
+## Known gaps
+
+- Attachment storage is local-disk only; the `StorageService` interface exists for a cloud backend but none is implemented yet.
+- Soft-delete is partial: `Organization`/`Workspace`/`Project` support archive/restore; `Task`/`Comment`/`Attachment` are hard-deleted.
+- No CI pipeline, health endpoint, full-text search, or OpenTelemetry tracing yet (bonus scope, requirement §25).
