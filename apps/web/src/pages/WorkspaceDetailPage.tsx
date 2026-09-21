@@ -1,6 +1,12 @@
-import { useEffect, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
-import { TaskStatus, WorkspaceRole, type Workspace, type WorkspaceStats } from '@ecp/shared-types';
+import { useEffect, useState, type FormEvent } from 'react';
+import { Link, useNavigate, useParams } from 'react-router-dom';
+import {
+  TaskStatus,
+  WorkspaceRole,
+  type Project,
+  type Workspace,
+  type WorkspaceStats,
+} from '@ecp/shared-types';
 import { api, ApiError } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
@@ -9,9 +15,81 @@ import { Card, CardBody, CardHeader } from '../components/ui/Card';
 import { Badge, STATUS_LABEL } from '../components/ui/Badge';
 import { PageSpinner } from '../components/ui/Spinner';
 import { EmptyState } from '../components/ui/EmptyState';
+import { Modal } from '../components/ui/Modal';
+import { Field, Input } from '../components/ui/Input';
+import { Textarea } from '../components/ui/Textarea';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { InviteMemberModal } from '../components/InviteMemberModal';
 import { hasMinRole, ROLE_TONE } from '../lib/roles';
+
+function CreateProjectModal({
+  open,
+  onClose,
+  onCreated,
+  workspaceId,
+}: {
+  open: boolean;
+  onClose: () => void;
+  onCreated: () => void;
+  workspaceId: string;
+}) {
+  const [name, setName] = useState('');
+  const [description, setDescription] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const toast = useToast();
+
+  const reset = () => {
+    setName('');
+    setDescription('');
+  };
+
+  const onSubmit = async (event: FormEvent) => {
+    event.preventDefault();
+    setSubmitting(true);
+    try {
+      await api.projects.create(workspaceId, { name, description: description || undefined });
+      toast.success('Project created.');
+      reset();
+      onCreated();
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : 'Could not create project.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <Modal
+      open={open}
+      onClose={() => {
+        reset();
+        onClose();
+      }}
+      title="New project"
+    >
+      <form onSubmit={onSubmit} className="flex flex-col gap-4">
+        <Field label="Name" htmlFor="proj-name">
+          <Input id="proj-name" value={name} onChange={(e) => setName(e.target.value)} required autoFocus />
+        </Field>
+        <Field label="Description" htmlFor="proj-description">
+          <Textarea
+            id="proj-description"
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+          />
+        </Field>
+        <div className="mt-2 flex justify-end gap-2">
+          <Button type="button" variant="secondary" onClick={onClose} disabled={submitting}>
+            Cancel
+          </Button>
+          <Button type="submit" disabled={submitting}>
+            {submitting ? 'Creating…' : 'Create project'}
+          </Button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
 
 export function WorkspaceDetailPage() {
   const { workspaceId = '' } = useParams();
@@ -21,18 +99,22 @@ export function WorkspaceDetailPage() {
 
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
   const [stats, setStats] = useState<WorkspaceStats | null>(null);
+  const [projects, setProjects] = useState<Project[]>([]);
   const [inviteOpen, setInviteOpen] = useState(false);
   const [archiveOpen, setArchiveOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [createProjectOpen, setCreateProjectOpen] = useState(false);
 
   const load = async () => {
     try {
-      const [ws, st] = await Promise.all([
+      const [ws, st, projectPage] = await Promise.all([
         api.workspaces.get(workspaceId),
         api.workspaces.getStats(workspaceId),
+        api.projects.list(workspaceId, { limit: 50 }),
       ]);
       setWorkspace(ws);
       setStats(st);
+      setProjects(projectPage.items);
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : 'Failed to load workspace.');
     }
@@ -138,9 +220,54 @@ export function WorkspaceDetailPage() {
         </CardBody>
       </Card>
 
-      <EmptyState
-        title="Projects — coming soon"
-        description="Project and task management for this workspace lands in the next update."
+      <Card>
+        <CardBody>
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-semibold text-slate-700">Projects</h3>
+            {canManage && (
+              <Button size="sm" onClick={() => setCreateProjectOpen(true)}>
+                + New project
+              </Button>
+            )}
+          </div>
+
+          {projects.length === 0 ? (
+            <EmptyState
+              title="No projects yet"
+              description="Create a project to start adding tasks."
+            />
+          ) : (
+            <div className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {projects.map((project) => (
+                <Link key={project.id} to={`/workspaces/${workspaceId}/projects/${project.id}`}>
+                  <Card className="h-full transition-shadow hover:shadow-popover">
+                    <CardBody>
+                      <div className="flex items-center gap-2">
+                        <p className="font-semibold text-slate-900">{project.name}</p>
+                        {project.isArchived && <Badge tone="yellow">Archived</Badge>}
+                      </div>
+                      {project.description && (
+                        <p className="mt-1 line-clamp-2 text-sm text-slate-500">
+                          {project.description}
+                        </p>
+                      )}
+                    </CardBody>
+                  </Card>
+                </Link>
+              ))}
+            </div>
+          )}
+        </CardBody>
+      </Card>
+
+      <CreateProjectModal
+        open={createProjectOpen}
+        onClose={() => setCreateProjectOpen(false)}
+        onCreated={() => {
+          setCreateProjectOpen(false);
+          load();
+        }}
+        workspaceId={workspaceId}
       />
 
       <InviteMemberModal

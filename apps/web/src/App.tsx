@@ -11,6 +11,7 @@ import { OrganizationsPage } from './pages/OrganizationsPage';
 import { OrganizationDetailPage } from './pages/OrganizationDetailPage';
 import { WorkspacesPage } from './pages/WorkspacesPage';
 import { WorkspaceDetailPage } from './pages/WorkspaceDetailPage';
+import { ProjectDetailPage } from './pages/ProjectDetailPage';
 
 export function App() {
   return (
@@ -32,6 +33,10 @@ export function App() {
               <Route path="/organizations/:organizationId" element={<OrganizationDetailPage />} />
               <Route path="/workspaces" element={<WorkspacesPage />} />
               <Route path="/workspaces/:workspaceId" element={<WorkspaceDetailPage />} />
+              <Route
+                path="/workspaces/:workspaceId/projects/:projectId"
+                element={<ProjectDetailPage />}
+              />
               <Route
                 path="/notifications"
                 element={

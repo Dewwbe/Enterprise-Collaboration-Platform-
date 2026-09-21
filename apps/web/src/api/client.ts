@@ -3,12 +3,21 @@ import type {
   ApiSuccessResponse,
   AuthResponse,
   CreateOrganizationInput,
+  CreateProjectInput,
+  CreateTaskInput,
   CreateWorkspaceInput,
   InviteMemberInput,
   LoginInput,
   Organization,
+  PaginatedResult,
+  Project,
+  QueryProjectsInput,
+  QueryTasksInput,
   RegisterInput,
+  Task,
   UpdateOrganizationInput,
+  UpdateProjectInput,
+  UpdateTaskInput,
   UpdateWorkspaceInput,
   UserDashboard,
   UserProfile,
@@ -85,6 +94,17 @@ async function request<T>(
   }
 
   return (body as ApiSuccessResponse<T>).data;
+}
+
+function toQueryString(params: object): string {
+  const search = new URLSearchParams();
+  for (const [key, value] of Object.entries(params as Record<string, unknown>)) {
+    if (value !== undefined && value !== null && value !== '') {
+      search.set(key, String(value));
+    }
+  }
+  const qs = search.toString();
+  return qs ? `?${qs}` : '';
 }
 
 async function refreshTokens(): Promise<boolean> {
@@ -172,5 +192,53 @@ export const api = {
         method: 'POST',
         body: JSON.stringify(input),
       }),
+  },
+  projects: {
+    list: (workspaceId: string, query: QueryProjectsInput = {}) =>
+      request<PaginatedResult<Project>>(
+        `/workspaces/${workspaceId}/projects${toQueryString(query)}`,
+      ),
+    get: (workspaceId: string, projectId: string) =>
+      request<Project>(`/workspaces/${workspaceId}/projects/${projectId}`),
+    create: (workspaceId: string, input: CreateProjectInput) =>
+      request<Project>(`/workspaces/${workspaceId}/projects`, {
+        method: 'POST',
+        body: JSON.stringify(input),
+      }),
+    update: (workspaceId: string, projectId: string, input: UpdateProjectInput) =>
+      request<Project>(`/workspaces/${workspaceId}/projects/${projectId}`, {
+        method: 'PATCH',
+        body: JSON.stringify(input),
+      }),
+    archive: (workspaceId: string, projectId: string) =>
+      request<Project>(`/workspaces/${workspaceId}/projects/${projectId}/archive`, {
+        method: 'POST',
+      }),
+    restore: (workspaceId: string, projectId: string) =>
+      request<Project>(`/workspaces/${workspaceId}/projects/${projectId}/restore`, {
+        method: 'POST',
+      }),
+    remove: (workspaceId: string, projectId: string) =>
+      request<void>(`/workspaces/${workspaceId}/projects/${projectId}`, { method: 'DELETE' }),
+  },
+  tasks: {
+    list: (projectId: string, query: QueryTasksInput = {}) =>
+      request<PaginatedResult<Task>>(`/projects/${projectId}/tasks${toQueryString(query)}`),
+    get: (projectId: string, taskId: string) =>
+      request<Task>(`/projects/${projectId}/tasks/${taskId}`),
+    create: (projectId: string, input: CreateTaskInput) =>
+      request<Task>(`/projects/${projectId}/tasks`, {
+        method: 'POST',
+        body: JSON.stringify(input),
+      }),
+    update: (projectId: string, taskId: string, input: UpdateTaskInput) =>
+      request<Task>(`/projects/${projectId}/tasks/${taskId}`, {
+        method: 'PATCH',
+        body: JSON.stringify(input),
+      }),
+    remove: (projectId: string, taskId: string) =>
+      request<void>(`/projects/${projectId}/tasks/${taskId}`, { method: 'DELETE' }),
+    restore: (projectId: string, taskId: string) =>
+      request<Task>(`/projects/${projectId}/tasks/${taskId}/restore`, { method: 'POST' }),
   },
 };

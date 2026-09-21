@@ -149,3 +149,83 @@ export interface WorkspaceStats {
   projectCount: number;
   taskCounts: Record<TaskStatus, number>;
 }
+
+// Shape of every paginated list endpoint (projects, tasks, notifications).
+export interface PaginatedResult<T> {
+  items: T[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+}
+
+export interface Project {
+  id: string;
+  name: string;
+  description: string | null;
+  workspaceId: string;
+  isArchived: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateProjectInput {
+  name: string;
+  description?: string;
+}
+
+export interface UpdateProjectInput {
+  name?: string;
+  description?: string;
+}
+
+export interface QueryProjectsInput {
+  search?: string;
+  includeArchived?: boolean;
+  page?: number;
+  limit?: number;
+}
+
+export interface Task {
+  id: string;
+  projectId: string;
+  title: string;
+  description: string | null;
+  status: TaskStatus;
+  priority: TaskPriority;
+  dueDate: string | null;
+  labels: string[];
+  assigneeId: string | null;
+  reporterId: string;
+  deletedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateTaskInput {
+  title: string;
+  description?: string;
+  priority?: TaskPriority;
+  dueDate?: string;
+  labels?: string[];
+  assigneeId?: string;
+}
+
+export interface UpdateTaskInput {
+  title?: string;
+  description?: string;
+  priority?: TaskPriority;
+  dueDate?: string;
+  labels?: string[];
+  status?: TaskStatus;
+  assigneeId?: string | null;
+}
+
+export interface QueryTasksInput {
+  status?: TaskStatus;
+  priority?: TaskPriority;
+  assigneeId?: string;
+  sort?: string;
+  page?: number;
+  limit?: number;
+}
