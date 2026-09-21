@@ -1,5 +1,6 @@
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
+import { useNotifications } from '../../context/NotificationsContext';
 import { Avatar } from '../ui/Avatar';
 import { BellIcon, SearchIcon, MenuIcon } from './icons';
 
@@ -16,6 +17,7 @@ function titleForPath(pathname: string): string {
 
 export function Topbar({ onMenuClick }: { onMenuClick: () => void }) {
   const { user } = useAuth();
+  const { unreadCount } = useNotifications();
   const location = useLocation();
 
   return (
@@ -40,10 +42,15 @@ export function Topbar({ onMenuClick }: { onMenuClick: () => void }) {
 
         <Link
           to="/notifications"
-          aria-label="Notifications"
-          className="rounded-full p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-700"
+          aria-label={unreadCount > 0 ? `Notifications, ${unreadCount} unread` : 'Notifications'}
+          className="relative rounded-full p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-700"
         >
           <BellIcon className="h-5 w-5" />
+          {unreadCount > 0 && (
+            <span className="absolute right-1 top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-600 px-1 text-[10px] font-semibold text-white">
+              {unreadCount > 9 ? '9+' : unreadCount}
+            </span>
+          )}
         </Link>
 
         <Avatar firstName={user?.firstName} lastName={user?.lastName} size="sm" />

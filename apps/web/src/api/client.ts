@@ -8,9 +8,11 @@ import type {
   CreateWorkspaceInput,
   InviteMemberInput,
   LoginInput,
+  Notification,
   Organization,
   PaginatedResult,
   Project,
+  QueryNotificationsInput,
   QueryProjectsInput,
   QueryTasksInput,
   RegisterInput,
@@ -240,5 +242,11 @@ export const api = {
       request<void>(`/projects/${projectId}/tasks/${taskId}`, { method: 'DELETE' }),
     restore: (projectId: string, taskId: string) =>
       request<Task>(`/projects/${projectId}/tasks/${taskId}/restore`, { method: 'POST' }),
+  },
+  notifications: {
+    list: (query: QueryNotificationsInput = {}) =>
+      request<PaginatedResult<Notification>>(`/notifications${toQueryString(query)}`),
+    markRead: (id: string) =>
+      request<Notification>(`/notifications/${id}/read`, { method: 'PATCH' }),
   },
 };

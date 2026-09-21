@@ -229,3 +229,27 @@ export interface QueryTasksInput {
   page?: number;
   limit?: number;
 }
+
+export enum NotificationType {
+  TASK_ASSIGNED = 'TASK_ASSIGNED',
+  TASK_COMPLETED = 'TASK_COMPLETED',
+  COMMENT_ADDED = 'COMMENT_ADDED',
+  USER_INVITED = 'USER_INVITED',
+  TASK_DUE_REMINDER = 'TASK_DUE_REMINDER',
+  WEEKLY_SUMMARY = 'WEEKLY_SUMMARY',
+}
+
+export interface Notification {
+  id: string;
+  userId: string;
+  type: NotificationType;
+  payload: Record<string, unknown>;
+  readAt: string | null;
+  createdAt: string;
+}
+
+export interface QueryNotificationsInput {
+  unreadOnly?: boolean;
+  page?: number;
+  limit?: number;
+}
