@@ -17,6 +17,23 @@ export class CommentsService {
 
   private async requireOwnComment(taskId: string, commentId: string, userId: string) {
     const comment = await this.prisma.comment.findUnique({ where: { id: commentId } });
+    if (!comment || comment.taskId !== taskId || comment.deletedAt) {
+      throw new NotFoundException('Comment not found.');
+    }
+    if (comment.authorId !== userId) {
+      throw new ForbiddenException('You can only modify your own comments.');
+    }
+    return comment;
+  }
+
+  // Restore needs to find a comment requireOwnComment would now 404 on (it's
+  // soft-deleted), so it looks the row up directly instead.
+  private async requireOwnDeletedComment(
+    taskId: string,
+    commentId: string,
+    userId: string,
+  ) {
+    const comment = await this.prisma.comment.findUnique({ where: { id: commentId } });
     if (!comment || comment.taskId !== taskId) {
       throw new NotFoundException('Comment not found.');
     }
@@ -56,7 +73,7 @@ export class CommentsService {
   async findAll(userId: string, taskId: string) {
     await this.workspaceAccess.requireTaskMembership(taskId, userId);
     return this.prisma.comment.findMany({
-      where: { taskId },
+      where: { taskId, deletedAt: null },
       orderBy: { createdAt: 'asc' },
     });
   }
@@ -73,6 +90,18 @@ export class CommentsService {
   async remove(userId: string, taskId: string, commentId: string) {
     await this.workspaceAccess.requireTaskMembership(taskId, userId);
     await this.requireOwnComment(taskId, commentId, userId);
-    await this.prisma.comment.delete({ where: { id: commentId } });
+    await this.prisma.comment.update({
+      where: { id: commentId },
+      data: { deletedAt: new Date() },
+    });
+  }
+
+  async restore(userId: string, taskId: string, commentId: string) {
+    await this.workspaceAccess.requireTaskMembership(taskId, userId);
+    await this.requireOwnDeletedComment(taskId, commentId, userId);
+    return this.prisma.comment.update({
+      where: { id: commentId },
+      data: { deletedAt: null },
+    });
   }
 }

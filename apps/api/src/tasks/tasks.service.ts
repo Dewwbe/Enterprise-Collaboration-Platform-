@@ -41,6 +41,28 @@ export class TasksService {
     return { task, membership };
   }
 
+  // Restore needs to find a task requireTaskMembership would now 404 on
+  // (it's soft-deleted), so it looks the row up directly instead.
+  private async requireTaskInProjectIncludingDeleted(
+    projectId: string,
+    taskId: string,
+    userId: string,
+  ) {
+    const task = await this.prisma.task.findUnique({
+      where: { id: taskId },
+      include: { project: true },
+    });
+    if (!task || task.projectId !== projectId) {
+      throw new NotFoundException('Task not found.');
+    }
+    const membership = await this.workspaceAccess.requireWorkspaceMembership(
+      task.project.workspaceId,
+      userId,
+      'Task not found.',
+    );
+    return { task, membership };
+  }
+
   private async requireWorkspaceMember(workspaceId: string, assigneeId: string) {
     const membership = await this.workspaceAccess.findWorkspaceMembership(
       workspaceId,
@@ -119,6 +141,7 @@ export class TasksService {
 
     const where = {
       projectId,
+      deletedAt: null,
       ...(query.status ? { status: query.status } : {}),
       ...(query.priority ? { priority: query.priority } : {}),
       ...(query.assigneeId ? { assigneeId: query.assigneeId } : {}),
@@ -229,10 +252,34 @@ export class TasksService {
       membership.role as WorkspaceRole,
       WorkspaceRole.ADMIN,
     );
-    await this.prisma.task.delete({ where: { id: taskId } });
+    await this.prisma.task.update({
+      where: { id: taskId },
+      data: { deletedAt: new Date() },
+    });
     await this.cache.del(workspaceStatsCacheKey(task.project.workspaceId));
     if (task.assigneeId) {
       await this.cache.del(dashboardCacheKey(task.assigneeId));
     }
+  }
+
+  async restore(userId: string, projectId: string, taskId: string) {
+    const { task, membership } = await this.requireTaskInProjectIncludingDeleted(
+      projectId,
+      taskId,
+      userId,
+    );
+    this.workspaceAccess.assertMinRole(
+      membership.role as WorkspaceRole,
+      WorkspaceRole.ADMIN,
+    );
+    const restored = await this.prisma.task.update({
+      where: { id: taskId },
+      data: { deletedAt: null },
+    });
+    await this.cache.del(workspaceStatsCacheKey(task.project.workspaceId));
+    if (task.assigneeId) {
+      await this.cache.del(dashboardCacheKey(task.assigneeId));
+    }
+    return restored;
   }
 }
