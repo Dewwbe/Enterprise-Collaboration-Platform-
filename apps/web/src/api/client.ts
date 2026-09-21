@@ -7,6 +7,7 @@ import type {
   LoginInput,
   Organization,
   RegisterInput,
+  UserDashboard,
   UserProfile,
   Workspace,
 } from '@ecp/shared-types';
@@ -119,6 +120,7 @@ export const api = {
   },
   users: {
     me: () => request<UserProfile>('/users/me'),
+    dashboard: () => request<UserDashboard>('/users/me/dashboard'),
   },
   organizations: {
     list: () => request<Organization[]>('/organizations'),

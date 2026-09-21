@@ -94,3 +94,36 @@ export interface CreateWorkspaceInput {
   name: string;
   slug: string;
 }
+
+export enum TaskStatus {
+  TODO = 'TODO',
+  IN_PROGRESS = 'IN_PROGRESS',
+  REVIEW = 'REVIEW',
+  DONE = 'DONE',
+}
+
+export enum TaskPriority {
+  LOW = 'LOW',
+  MEDIUM = 'MEDIUM',
+  HIGH = 'HIGH',
+  URGENT = 'URGENT',
+}
+
+export interface DashboardTaskSummary {
+  id: string;
+  title: string;
+  status: TaskStatus;
+  priority: TaskPriority;
+  dueDate: string | null;
+  projectId: string;
+  updatedAt: string;
+}
+
+// Shape of GET /users/me/dashboard - see UsersService.getDashboard.
+export interface UserDashboard {
+  workspaceCount: number;
+  projectCount: number;
+  tasksByStatus: Record<TaskStatus, number>;
+  overdueTaskCount: number;
+  recentTasks: DashboardTaskSummary[];
+}
