@@ -47,6 +47,16 @@ export class CacheService implements OnModuleDestroy {
     }
   }
 
+  /** Unlike the cache-aside methods above, this reports failure instead of hiding it - used by the health check. */
+  async ping(): Promise<boolean> {
+    try {
+      return (await this.redis.ping()) === 'PONG';
+    } catch (error) {
+      this.logger.warn(`Cache ping failed: ${(error as Error).message}`);
+      return false;
+    }
+  }
+
   /** Deletes every key matching a prefix, using SCAN so it never blocks Redis. */
   async delByPrefix(prefix: string): Promise<void> {
     try {
