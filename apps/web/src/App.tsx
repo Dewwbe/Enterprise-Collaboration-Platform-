@@ -7,6 +7,10 @@ import { ComingSoonPage } from './components/ComingSoonPage';
 import { LoginPage } from './pages/LoginPage';
 import { RegisterPage } from './pages/RegisterPage';
 import { DashboardPage } from './pages/DashboardPage';
+import { OrganizationsPage } from './pages/OrganizationsPage';
+import { OrganizationDetailPage } from './pages/OrganizationDetailPage';
+import { WorkspacesPage } from './pages/WorkspacesPage';
+import { WorkspaceDetailPage } from './pages/WorkspaceDetailPage';
 
 export function App() {
   return (
@@ -24,24 +28,10 @@ export function App() {
               }
             >
               <Route path="/" element={<DashboardPage />} />
-              <Route
-                path="/organizations"
-                element={
-                  <ComingSoonPage
-                    title="Organizations"
-                    description="Create organizations, manage members and roles, and archive or delete them here."
-                  />
-                }
-              />
-              <Route
-                path="/workspaces"
-                element={
-                  <ComingSoonPage
-                    title="Workspaces"
-                    description="View workspace stats, manage members, and browse projects within each workspace."
-                  />
-                }
-              />
+              <Route path="/organizations" element={<OrganizationsPage />} />
+              <Route path="/organizations/:organizationId" element={<OrganizationDetailPage />} />
+              <Route path="/workspaces" element={<WorkspacesPage />} />
+              <Route path="/workspaces/:workspaceId" element={<WorkspaceDetailPage />} />
               <Route
                 path="/notifications"
                 element={

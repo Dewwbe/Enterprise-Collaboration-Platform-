@@ -4,12 +4,16 @@ import type {
   AuthResponse,
   CreateOrganizationInput,
   CreateWorkspaceInput,
+  InviteMemberInput,
   LoginInput,
   Organization,
   RegisterInput,
+  UpdateOrganizationInput,
+  UpdateWorkspaceInput,
   UserDashboard,
   UserProfile,
   Workspace,
+  WorkspaceStats,
 } from '@ecp/shared-types';
 
 const API_BASE = import.meta.env.VITE_API_URL ?? '/api/v1';
@@ -121,6 +125,8 @@ export const api = {
   users: {
     me: () => request<UserProfile>('/users/me'),
     dashboard: () => request<UserDashboard>('/users/me/dashboard'),
+    lookup: (email: string) =>
+      request<UserProfile>(`/users/lookup?email=${encodeURIComponent(email)}`),
   },
   organizations: {
     list: () => request<Organization[]>('/organizations'),
@@ -130,12 +136,39 @@ export const api = {
         method: 'POST',
         body: JSON.stringify(input),
       }),
+    update: (id: string, input: UpdateOrganizationInput) =>
+      request<Organization>(`/organizations/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify(input),
+      }),
+    archive: (id: string) =>
+      request<Organization>(`/organizations/${id}/archive`, { method: 'POST' }),
+    remove: (id: string) => request<void>(`/organizations/${id}`, { method: 'DELETE' }),
+    inviteMember: (id: string, input: InviteMemberInput) =>
+      request(`/organizations/${id}/members`, {
+        method: 'POST',
+        body: JSON.stringify(input),
+      }),
   },
   workspaces: {
     list: () => request<Workspace[]>('/workspaces'),
     get: (id: string) => request<Workspace>(`/workspaces/${id}`),
+    getStats: (id: string) => request<WorkspaceStats>(`/workspaces/${id}/stats`),
     create: (input: CreateWorkspaceInput) =>
       request<Workspace>('/workspaces', {
+        method: 'POST',
+        body: JSON.stringify(input),
+      }),
+    update: (id: string, input: UpdateWorkspaceInput) =>
+      request<Workspace>(`/workspaces/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify(input),
+      }),
+    archive: (id: string) =>
+      request<Workspace>(`/workspaces/${id}/archive`, { method: 'POST' }),
+    remove: (id: string) => request<void>(`/workspaces/${id}`, { method: 'DELETE' }),
+    inviteMember: (id: string, input: InviteMemberInput) =>
+      request(`/workspaces/${id}/members`, {
         method: 'POST',
         body: JSON.stringify(input),
       }),

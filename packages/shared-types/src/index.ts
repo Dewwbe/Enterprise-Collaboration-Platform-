@@ -72,6 +72,16 @@ export interface CreateOrganizationInput {
   slug: string;
 }
 
+// Slug is immutable after creation - see apps/api UpdateOrganizationDto.
+export interface UpdateOrganizationInput {
+  name?: string;
+}
+
+export interface InviteMemberInput {
+  userId: string;
+  role: WorkspaceRole;
+}
+
 export interface WorkspaceMemberSummary {
   userId: string;
   role: WorkspaceRole;
@@ -93,6 +103,11 @@ export interface CreateWorkspaceInput {
   organizationId: string;
   name: string;
   slug: string;
+}
+
+// organizationId and slug are immutable after creation - see apps/api UpdateWorkspaceDto.
+export interface UpdateWorkspaceInput {
+  name?: string;
 }
 
 export enum TaskStatus {
@@ -126,4 +141,11 @@ export interface UserDashboard {
   tasksByStatus: Record<TaskStatus, number>;
   overdueTaskCount: number;
   recentTasks: DashboardTaskSummary[];
+}
+
+// Shape of GET /workspaces/:id/stats - see WorkspacesService.getStats.
+export interface WorkspaceStats {
+  memberCount: number;
+  projectCount: number;
+  taskCounts: Record<TaskStatus, number>;
 }
