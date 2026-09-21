@@ -58,6 +58,10 @@ jobs:
       UPLOAD_DIR: uploads
       PORT: 3000
       API_PREFIX: api/v1
+      # Generous on purpose: e2e runs in the same Jest process as the full
+      # unit + coverage suite (see steps below), which sits well above a
+      # freshly started server's heap usage without being unhealthy.
+      HEALTH_MAX_HEAP_BYTES: 536870912
       # Job-level so step `if:` conditions can read it via env.SONAR_TOKEN -
       # the secrets context isn't a valid named-value inside an `if:` expression.
       SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
