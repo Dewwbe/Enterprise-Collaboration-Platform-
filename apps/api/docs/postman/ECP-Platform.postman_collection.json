@@ -1349,6 +1349,67 @@
               }
             }
           ]
+        },
+        {
+          "name": "Delete Task (Soft)",
+          "request": {
+            "method": "DELETE",
+            "url": {
+              "raw": "{{baseUrl}}/projects/{{projectId}}/tasks/{{taskId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "projects",
+                "{{projectId}}",
+                "tasks",
+                "{{taskId}}"
+              ]
+            },
+            "description": "ADMIN or OWNER only. Soft delete - see Restore Task below, which reverses this so the task stays usable for the Comments/Attachments folders."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 204', function () { pm.response.to.have.status(204); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Restore Task",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/projects/{{projectId}}/tasks/{{taskId}}/restore",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "projects",
+                "{{projectId}}",
+                "tasks",
+                "{{taskId}}",
+                "restore"
+              ]
+            },
+            "description": "ADMIN or OWNER only. Reverses Delete Task (Soft)."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 201', function () { pm.response.to.have.status(201); });"
+                ]
+              }
+            }
+          ]
         }
       ]
     },
@@ -1490,7 +1551,7 @@
                 "{{commentId}}"
               ]
             },
-            "description": "Only the comment's own author may delete it, regardless of workspace role."
+            "description": "Only the comment's own author may delete it, regardless of workspace role. Soft delete - see Restore Comment (Own) below."
           },
           "event": [
             {
@@ -1499,6 +1560,37 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test('Status code is 204', function () { pm.response.to.have.status(204); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Restore Comment (Own)",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/tasks/{{taskId}}/comments/{{commentId}}/restore",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "tasks",
+                "{{taskId}}",
+                "comments",
+                "{{commentId}}",
+                "restore"
+              ]
+            },
+            "description": "Only the comment's own author may restore it. Reverses Delete Comment (Own)."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 201', function () { pm.response.to.have.status(201); });"
                 ]
               }
             }
@@ -1772,7 +1864,7 @@
                 "{{attachmentId}}"
               ]
             },
-            "description": "Uploader, or ADMIN/OWNER, may delete. Same conditional outcome as Download Attachment above."
+            "description": "Uploader, or ADMIN/OWNER, may delete. Same conditional outcome as Download Attachment above. Soft delete - see Restore Attachment below."
           },
           "event": [
             {
@@ -1783,6 +1875,44 @@
                   "const uploaded = pm.collectionVariables.get('attachmentUploaded') === 'true';",
                   "if (uploaded) {",
                   "  pm.test('Status code is 204', function () { pm.response.to.have.status(204); });",
+                  "} else {",
+                  "  pm.test('No attachment uploaded this run - expects 404', function () {",
+                  "    pm.response.to.have.status(404);",
+                  "  });",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Restore Attachment",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/tasks/{{taskId}}/attachments/{{attachmentId}}/restore",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "tasks",
+                "{{taskId}}",
+                "attachments",
+                "{{attachmentId}}",
+                "restore"
+              ]
+            },
+            "description": "Uploader, or ADMIN/OWNER, may restore. Reverses Delete Attachment - the file was kept on disk, so this returns the attachment intact. Same conditional outcome as Download Attachment above."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const uploaded = pm.collectionVariables.get('attachmentUploaded') === 'true';",
+                  "if (uploaded) {",
+                  "  pm.test('Status code is 201', function () { pm.response.to.have.status(201); });",
                   "} else {",
                   "  pm.test('No attachment uploaded this run - expects 404', function () {",
                   "    pm.response.to.have.status(404);",
@@ -1990,7 +2120,7 @@
                 "{{taskId}}"
               ]
             },
-            "description": "ADMIN or OWNER only."
+            "description": "ADMIN or OWNER only. Soft delete, but Delete Project below still removes the row for good via cascade - this folder still leaves a clean DB."
           },
           "event": [
             {

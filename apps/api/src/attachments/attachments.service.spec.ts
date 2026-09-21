@@ -21,6 +21,7 @@ describe('AttachmentsService', () => {
       create: jest.Mock;
       findMany: jest.Mock;
       findUnique: jest.Mock;
+      update: jest.Mock;
       delete: jest.Mock;
     };
   };
@@ -43,6 +44,7 @@ describe('AttachmentsService', () => {
         create: jest.fn(),
         findMany: jest.fn(),
         findUnique: jest.fn(),
+        update: jest.fn(),
         delete: jest.fn(),
       },
     };
@@ -153,7 +155,7 @@ describe('AttachmentsService', () => {
   describe('remove', () => {
     const membershipOf = (role: WorkspaceRole) => ({ role });
 
-    it('allows the uploader to delete their own attachment', async () => {
+    it('soft deletes an attachment (sets deletedAt, keeps the stored file)', async () => {
       prisma.task.findUnique.mockResolvedValue({
         id: 'task-1',
         project: { workspaceId: 'ws-1' },
@@ -170,8 +172,12 @@ describe('AttachmentsService', () => {
 
       await service.remove('user-1', 'task-1', 'att-1');
 
-      expect(prisma.attachment.delete).toHaveBeenCalledWith({ where: { id: 'att-1' } });
-      expect(storage.delete).toHaveBeenCalledWith('key-1');
+      expect(prisma.attachment.update).toHaveBeenCalledWith({
+        where: { id: 'att-1' },
+        data: { deletedAt: expect.any(Date) },
+      });
+      expect(prisma.attachment.delete).not.toHaveBeenCalled();
+      expect(storage.delete).not.toHaveBeenCalled();
     });
 
     it("allows an ADMIN to delete someone else's attachment", async () => {
@@ -191,7 +197,7 @@ describe('AttachmentsService', () => {
 
       await service.remove('user-1', 'task-1', 'att-1');
 
-      expect(prisma.attachment.delete).toHaveBeenCalled();
+      expect(prisma.attachment.update).toHaveBeenCalled();
     });
 
     it("rejects a MEMBER deleting someone else's attachment", async () => {
@@ -212,7 +218,101 @@ describe('AttachmentsService', () => {
       await expect(service.remove('user-1', 'task-1', 'att-1')).rejects.toBeInstanceOf(
         ForbiddenException,
       );
-      expect(prisma.attachment.delete).not.toHaveBeenCalled();
+      expect(prisma.attachment.update).not.toHaveBeenCalled();
+    });
+
+    it('throws NotFoundException for an already soft-deleted attachment', async () => {
+      prisma.task.findUnique.mockResolvedValue({
+        id: 'task-1',
+        project: { workspaceId: 'ws-1' },
+      });
+      prisma.workspaceMember.findUnique.mockResolvedValue(
+        membershipOf(WorkspaceRole.MEMBER),
+      );
+      prisma.attachment.findUnique.mockResolvedValue({
+        id: 'att-1',
+        taskId: 'task-1',
+        uploaderId: 'user-1',
+        storageKey: 'key-1',
+        deletedAt: new Date(),
+      });
+
+      await expect(service.remove('user-1', 'task-1', 'att-1')).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
+    });
+  });
+
+  describe('restore', () => {
+    const membershipOf = (role: WorkspaceRole) => ({ role });
+
+    it("rejects a MEMBER restoring someone else's attachment", async () => {
+      prisma.task.findUnique.mockResolvedValue({
+        id: 'task-1',
+        project: { workspaceId: 'ws-1' },
+      });
+      prisma.workspaceMember.findUnique.mockResolvedValue(
+        membershipOf(WorkspaceRole.MEMBER),
+      );
+      prisma.attachment.findUnique.mockResolvedValue({
+        id: 'att-1',
+        taskId: 'task-1',
+        uploaderId: 'user-2',
+        storageKey: 'key-1',
+        deletedAt: new Date(),
+      });
+
+      await expect(service.restore('user-1', 'task-1', 'att-1')).rejects.toBeInstanceOf(
+        ForbiddenException,
+      );
+      expect(prisma.attachment.update).not.toHaveBeenCalled();
+    });
+
+    it('allows the uploader to restore their own soft-deleted attachment', async () => {
+      prisma.task.findUnique.mockResolvedValue({
+        id: 'task-1',
+        project: { workspaceId: 'ws-1' },
+      });
+      prisma.workspaceMember.findUnique.mockResolvedValue(
+        membershipOf(WorkspaceRole.MEMBER),
+      );
+      prisma.attachment.findUnique.mockResolvedValue({
+        id: 'att-1',
+        taskId: 'task-1',
+        uploaderId: 'user-1',
+        storageKey: 'key-1',
+        deletedAt: new Date(),
+      });
+      prisma.attachment.update.mockResolvedValue({ id: 'att-1', deletedAt: null });
+
+      await service.restore('user-1', 'task-1', 'att-1');
+
+      expect(prisma.attachment.update).toHaveBeenCalledWith({
+        where: { id: 'att-1' },
+        data: { deletedAt: null },
+      });
+    });
+
+    it("allows an ADMIN to restore someone else's attachment", async () => {
+      prisma.task.findUnique.mockResolvedValue({
+        id: 'task-1',
+        project: { workspaceId: 'ws-1' },
+      });
+      prisma.workspaceMember.findUnique.mockResolvedValue(
+        membershipOf(WorkspaceRole.ADMIN),
+      );
+      prisma.attachment.findUnique.mockResolvedValue({
+        id: 'att-1',
+        taskId: 'task-1',
+        uploaderId: 'user-2',
+        storageKey: 'key-1',
+        deletedAt: new Date(),
+      });
+      prisma.attachment.update.mockResolvedValue({ id: 'att-1', deletedAt: null });
+
+      await service.restore('user-1', 'task-1', 'att-1');
+
+      expect(prisma.attachment.update).toHaveBeenCalled();
     });
   });
 

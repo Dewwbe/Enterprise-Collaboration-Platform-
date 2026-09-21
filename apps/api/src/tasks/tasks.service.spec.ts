@@ -273,7 +273,7 @@ describe('TasksService', () => {
       expect(prisma.task.delete).not.toHaveBeenCalled();
     });
 
-    it('allows an ADMIN to delete a task', async () => {
+    it('soft deletes a task (sets deletedAt instead of removing the row)', async () => {
       prisma.task.findUnique.mockResolvedValue({
         id: 'task-1',
         projectId: 'proj-1',
@@ -284,7 +284,11 @@ describe('TasksService', () => {
 
       await service.remove('user-1', 'proj-1', 'task-1');
 
-      expect(prisma.task.delete).toHaveBeenCalledWith({ where: { id: 'task-1' } });
+      expect(prisma.task.update).toHaveBeenCalledWith({
+        where: { id: 'task-1' },
+        data: { deletedAt: expect.any(Date) },
+      });
+      expect(prisma.task.delete).not.toHaveBeenCalled();
       expect(cache.del).toHaveBeenCalledWith('workspace-stats:ws-1');
       expect(cache.del).toHaveBeenCalledWith('dashboard:user-2');
     });
@@ -297,6 +301,72 @@ describe('TasksService', () => {
       });
 
       await expect(service.remove('user-1', 'proj-1', 'task-1')).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
+    });
+
+    it('throws NotFoundException for an already soft-deleted task', async () => {
+      prisma.task.findUnique.mockResolvedValue({
+        id: 'task-1',
+        projectId: 'proj-1',
+        project: { workspaceId: 'ws-1' },
+        deletedAt: new Date(),
+      });
+      prisma.workspaceMember.findUnique.mockResolvedValue({ role: WorkspaceRole.ADMIN });
+
+      await expect(service.remove('user-1', 'proj-1', 'task-1')).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
+      expect(prisma.task.update).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('restore', () => {
+    it('rejects a MEMBER from restoring a task', async () => {
+      prisma.task.findUnique.mockResolvedValue({
+        id: 'task-1',
+        projectId: 'proj-1',
+        project: { workspaceId: 'ws-1' },
+        deletedAt: new Date(),
+      });
+      prisma.workspaceMember.findUnique.mockResolvedValue({ role: WorkspaceRole.MEMBER });
+
+      await expect(service.restore('user-1', 'proj-1', 'task-1')).rejects.toBeInstanceOf(
+        ForbiddenException,
+      );
+      expect(prisma.task.update).not.toHaveBeenCalled();
+    });
+
+    it('allows an ADMIN to restore a soft-deleted task', async () => {
+      prisma.task.findUnique.mockResolvedValue({
+        id: 'task-1',
+        projectId: 'proj-1',
+        assigneeId: 'user-2',
+        project: { workspaceId: 'ws-1' },
+        deletedAt: new Date(),
+      });
+      prisma.workspaceMember.findUnique.mockResolvedValue({ role: WorkspaceRole.ADMIN });
+      prisma.task.update.mockResolvedValue({ id: 'task-1', deletedAt: null });
+
+      await service.restore('user-1', 'proj-1', 'task-1');
+
+      expect(prisma.task.update).toHaveBeenCalledWith({
+        where: { id: 'task-1' },
+        data: { deletedAt: null },
+      });
+      expect(cache.del).toHaveBeenCalledWith('workspace-stats:ws-1');
+      expect(cache.del).toHaveBeenCalledWith('dashboard:user-2');
+    });
+
+    it('throws NotFoundException for a task outside the given project', async () => {
+      prisma.task.findUnique.mockResolvedValue({
+        id: 'task-1',
+        projectId: 'proj-2',
+        project: { workspaceId: 'ws-1' },
+        deletedAt: new Date(),
+      });
+
+      await expect(service.restore('user-1', 'proj-1', 'task-1')).rejects.toBeInstanceOf(
         NotFoundException,
       );
     });

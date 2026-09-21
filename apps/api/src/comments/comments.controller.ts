@@ -64,12 +64,26 @@ export class CommentsController {
   @Delete(':commentId')
   @HttpCode(HttpStatus.NO_CONTENT)
   @AuditLog('comment.delete', 'Comment', 'commentId')
-  @ApiOperation({ summary: 'Delete your own comment' })
+  @ApiOperation({
+    summary: 'Delete your own comment',
+    description: 'Soft delete - recoverable via POST /:commentId/restore.',
+  })
   remove(
     @CurrentUser('userId') userId: string,
     @Param('taskId', ParseUUIDPipe) taskId: string,
     @Param('commentId', ParseUUIDPipe) commentId: string,
   ) {
     return this.commentsService.remove(userId, taskId, commentId);
+  }
+
+  @Post(':commentId/restore')
+  @AuditLog('comment.restore', 'Comment', 'commentId')
+  @ApiOperation({ summary: 'Restore your own soft-deleted comment' })
+  restore(
+    @CurrentUser('userId') userId: string,
+    @Param('taskId', ParseUUIDPipe) taskId: string,
+    @Param('commentId', ParseUUIDPipe) commentId: string,
+  ) {
+    return this.commentsService.restore(userId, taskId, commentId);
   }
 }

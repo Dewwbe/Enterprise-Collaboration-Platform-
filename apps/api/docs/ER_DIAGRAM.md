@@ -112,6 +112,7 @@ erDiagram
         string[] labels
         string assigneeId FK
         string reporterId FK
+        datetime deletedAt
         datetime createdAt
         datetime updatedAt
     }
@@ -121,6 +122,7 @@ erDiagram
         string taskId FK
         string authorId FK
         string body
+        datetime deletedAt
         datetime createdAt
         datetime updatedAt
     }
@@ -133,6 +135,7 @@ erDiagram
         string storageKey
         string mimeType
         int sizeBytes
+        datetime deletedAt
         datetime createdAt
     }
 
@@ -162,4 +165,4 @@ erDiagram
 - **Organization vs. workspace roles are independent.** `OrganizationMember.role` and `WorkspaceMember.role` both use the same `WorkspaceRole` enum (`OWNER > ADMIN > MEMBER > VIEWER`) but are separate rows — a user's role in an organization does not determine their role in any specific workspace inside it.
 - **Tasks/comments/attachments carry no `workspaceId` of their own.** Workspace membership for these is resolved by joining up the chain (`task -> project -> workspace`), centralized in `WorkspaceAccessService` (see [`ARCHITECTURE.md`](ARCHITECTURE.md)) rather than duplicated per-entity.
 - **`AuditLog` is generic**, not one table per entity — `entityType` + `entityId` identify what changed, `previousValue`/`newValue` hold the before/after snapshot as JSON, satisfying requirement §15 (Audit Logs) without a table explosion.
-- **Soft-delete is partial today**: `Organization`, `Workspace`, and `Project` carry `isArchived` (reversible archive, not deletion); `Task`/`Comment`/`Attachment` are hard-deleted. A true `deletedAt` column on every entity is a tracked gap, not yet implemented.
+- **Two different reversible-delete mechanisms, by design.** `Organization`/`Workspace`/`Project` use `isArchived`: a user-visible pause state, discoverable via `?includeArchived=true` on their list endpoints. `Task`/`Comment`/`Attachment` use `deletedAt`: a recovery window for an accidental delete, not meant to be browsed - the id (e.g. from `AuditLog`) is what you restore with, via `POST .../restore`. Deleting a task does *not* cascade `deletedAt` onto its comments/attachments; they simply become unreachable through the normal task->comment/attachment routes (which 404 once the parent task is soft-deleted) and reappear automatically once the task is restored. Attachment soft-delete deliberately keeps the file on disk (not just the row) so restore returns the actual content, not just a dangling reference.

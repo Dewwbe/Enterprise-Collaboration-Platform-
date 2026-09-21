@@ -139,14 +139,16 @@ running. Summary by resource:
 **Tasks** (`/api/v1/projects/:projectId/tasks`)
 - `POST /` (MEMBER+) · `GET /?status=&priority=&assigneeId=&sort=&page=&limit=` · `GET /:taskId`
 - `PATCH /:taskId` (MEMBER+) — status must follow `TODO -> IN_PROGRESS -> REVIEW -> DONE`
-- `DELETE /:taskId` (ADMIN+)
+- `DELETE /:taskId` (ADMIN+, soft delete) · `POST /:taskId/restore` (ADMIN+)
 
 **Comments** (`/api/v1/tasks/:taskId/comments`)
-- `POST /` (MEMBER+) · `GET /` · `PATCH /:commentId` (own comment only) · `DELETE /:commentId` (own comment only)
+- `POST /` (MEMBER+) · `GET /` · `PATCH /:commentId` (own comment only)
+- `DELETE /:commentId` (own comment only, soft delete) · `POST /:commentId/restore` (own comment only)
 
 **Attachments** (`/api/v1/tasks/:taskId/attachments`)
 - `POST /` (MEMBER+, multipart) — size/MIME validated server-side · `GET /`
-- `GET /:attachmentId/download` · `DELETE /:attachmentId` (uploader, or ADMIN+)
+- `GET /:attachmentId/download` · `DELETE /:attachmentId` (uploader, or ADMIN+, soft delete)
+- `POST /:attachmentId/restore` (uploader, or ADMIN+)
 
 **Notifications** (`/api/v1/notifications`)
 - `GET /` — paginated, own notifications · `PATCH /:id/read`
@@ -192,5 +194,5 @@ rather than relying on TTL alone.
 ## Known gaps
 
 - Attachment storage is local-disk only; the `StorageService` interface exists for a cloud backend but none is implemented yet.
-- Soft-delete is partial: `Organization`/`Workspace`/`Project` support archive/restore; `Task`/`Comment`/`Attachment` are hard-deleted.
+- Soft-deleted attachments keep their file on disk indefinitely (needed so restore actually works) - nothing purges them yet.
 - No full-text search, project templates, or OpenTelemetry tracing yet (bonus scope, requirement §25).
