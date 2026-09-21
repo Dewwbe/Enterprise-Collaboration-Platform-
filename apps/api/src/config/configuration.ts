@@ -39,4 +39,11 @@ export default () => ({
     maxSizeMb: parseInt(process.env.UPLOAD_MAX_SIZE_MB || '10', 10),
     dir: process.env.UPLOAD_DIR || 'uploads',
   },
+  health: {
+    // Default is generous on purpose: this gates the /health endpoint's
+    // liveness check, and a Jest process that's already run the full unit +
+    // coverage suite before e2e (see ci.yml) can sit well above a tighter
+    // "normal request handling" threshold without actually being unhealthy.
+    maxHeapBytes: parseInt(process.env.HEALTH_MAX_HEAP_BYTES || `${512 * 1024 * 1024}`, 10),
+  },
 });
