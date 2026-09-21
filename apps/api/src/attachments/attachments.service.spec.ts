@@ -12,6 +12,16 @@ import { STORAGE_SERVICE } from '../storage/storage.interface';
 import { WorkspaceRole } from '../common/enums/workspace-role.enum';
 import { WorkspaceAccessService } from '../common/access/workspace-access.service';
 
+const taskFixture = { id: 'task-1', project: { workspaceId: 'ws-1' } };
+const membershipOf = (role: WorkspaceRole) => ({ role });
+const attachmentFixture = (overrides: Record<string, unknown> = {}) => ({
+  id: 'att-1',
+  taskId: 'task-1',
+  uploaderId: 'user-1',
+  storageKey: 'key-1',
+  ...overrides,
+});
+
 describe('AttachmentsService', () => {
   let service: AttachmentsService;
   let prisma: {
@@ -49,6 +59,11 @@ describe('AttachmentsService', () => {
       },
     };
     storage = { upload: jest.fn(), getStream: jest.fn(), delete: jest.fn() };
+    // Sane defaults - a workspace MEMBER acting on a task that exists in a
+    // known workspace. Individual tests override whichever mock their
+    // scenario actually needs to differ on.
+    prisma.task.findUnique.mockResolvedValue(taskFixture);
+    prisma.workspaceMember.findUnique.mockResolvedValue(membershipOf(WorkspaceRole.MEMBER));
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -73,11 +88,7 @@ describe('AttachmentsService', () => {
     });
 
     it('rejects a VIEWER from uploading', async () => {
-      prisma.task.findUnique.mockResolvedValue({
-        id: 'task-1',
-        project: { workspaceId: 'ws-1' },
-      });
-      prisma.workspaceMember.findUnique.mockResolvedValue({ role: WorkspaceRole.VIEWER });
+      prisma.workspaceMember.findUnique.mockResolvedValue(membershipOf(WorkspaceRole.VIEWER));
 
       await expect(service.create('user-1', 'task-1', baseFile())).rejects.toBeInstanceOf(
         ForbiddenException,
@@ -85,24 +96,12 @@ describe('AttachmentsService', () => {
     });
 
     it('rejects a missing file with a clean 400 instead of crashing', async () => {
-      prisma.task.findUnique.mockResolvedValue({
-        id: 'task-1',
-        project: { workspaceId: 'ws-1' },
-      });
-      prisma.workspaceMember.findUnique.mockResolvedValue({ role: WorkspaceRole.MEMBER });
-
       await expect(
         service.create('user-1', 'task-1', undefined as unknown as Express.Multer.File),
       ).rejects.toBeInstanceOf(BadRequestException);
     });
 
     it('rejects a disallowed MIME type', async () => {
-      prisma.task.findUnique.mockResolvedValue({
-        id: 'task-1',
-        project: { workspaceId: 'ws-1' },
-      });
-      prisma.workspaceMember.findUnique.mockResolvedValue({ role: WorkspaceRole.MEMBER });
-
       await expect(
         service.create(
           'user-1',
@@ -114,12 +113,6 @@ describe('AttachmentsService', () => {
     });
 
     it('rejects a file over the configured size limit', async () => {
-      prisma.task.findUnique.mockResolvedValue({
-        id: 'task-1',
-        project: { workspaceId: 'ws-1' },
-      });
-      prisma.workspaceMember.findUnique.mockResolvedValue({ role: WorkspaceRole.MEMBER });
-
       await expect(
         service.create('user-1', 'task-1', baseFile({ size: 11 * 1024 * 1024 })),
       ).rejects.toBeInstanceOf(BadRequestException);
@@ -127,11 +120,6 @@ describe('AttachmentsService', () => {
     });
 
     it('uploads and persists a valid file with a unique, sanitized storage key', async () => {
-      prisma.task.findUnique.mockResolvedValue({
-        id: 'task-1',
-        project: { workspaceId: 'ws-1' },
-      });
-      prisma.workspaceMember.findUnique.mockResolvedValue({ role: WorkspaceRole.MEMBER });
       prisma.attachment.create.mockResolvedValue({ id: 'att-1' });
 
       await service.create(
@@ -153,22 +141,8 @@ describe('AttachmentsService', () => {
   });
 
   describe('remove', () => {
-    const membershipOf = (role: WorkspaceRole) => ({ role });
-
     it('soft deletes an attachment (sets deletedAt, keeps the stored file)', async () => {
-      prisma.task.findUnique.mockResolvedValue({
-        id: 'task-1',
-        project: { workspaceId: 'ws-1' },
-      });
-      prisma.workspaceMember.findUnique.mockResolvedValue(
-        membershipOf(WorkspaceRole.MEMBER),
-      );
-      prisma.attachment.findUnique.mockResolvedValue({
-        id: 'att-1',
-        taskId: 'task-1',
-        uploaderId: 'user-1',
-        storageKey: 'key-1',
-      });
+      prisma.attachment.findUnique.mockResolvedValue(attachmentFixture());
 
       await service.remove('user-1', 'task-1', 'att-1');
 
@@ -181,19 +155,10 @@ describe('AttachmentsService', () => {
     });
 
     it("allows an ADMIN to delete someone else's attachment", async () => {
-      prisma.task.findUnique.mockResolvedValue({
-        id: 'task-1',
-        project: { workspaceId: 'ws-1' },
-      });
-      prisma.workspaceMember.findUnique.mockResolvedValue(
-        membershipOf(WorkspaceRole.ADMIN),
+      prisma.workspaceMember.findUnique.mockResolvedValue(membershipOf(WorkspaceRole.ADMIN));
+      prisma.attachment.findUnique.mockResolvedValue(
+        attachmentFixture({ uploaderId: 'user-2' }),
       );
-      prisma.attachment.findUnique.mockResolvedValue({
-        id: 'att-1',
-        taskId: 'task-1',
-        uploaderId: 'user-2',
-        storageKey: 'key-1',
-      });
 
       await service.remove('user-1', 'task-1', 'att-1');
 
@@ -201,19 +166,9 @@ describe('AttachmentsService', () => {
     });
 
     it("rejects a MEMBER deleting someone else's attachment", async () => {
-      prisma.task.findUnique.mockResolvedValue({
-        id: 'task-1',
-        project: { workspaceId: 'ws-1' },
-      });
-      prisma.workspaceMember.findUnique.mockResolvedValue(
-        membershipOf(WorkspaceRole.MEMBER),
+      prisma.attachment.findUnique.mockResolvedValue(
+        attachmentFixture({ uploaderId: 'user-2' }),
       );
-      prisma.attachment.findUnique.mockResolvedValue({
-        id: 'att-1',
-        taskId: 'task-1',
-        uploaderId: 'user-2',
-        storageKey: 'key-1',
-      });
 
       await expect(service.remove('user-1', 'task-1', 'att-1')).rejects.toBeInstanceOf(
         ForbiddenException,
@@ -222,20 +177,9 @@ describe('AttachmentsService', () => {
     });
 
     it('throws NotFoundException for an already soft-deleted attachment', async () => {
-      prisma.task.findUnique.mockResolvedValue({
-        id: 'task-1',
-        project: { workspaceId: 'ws-1' },
-      });
-      prisma.workspaceMember.findUnique.mockResolvedValue(
-        membershipOf(WorkspaceRole.MEMBER),
+      prisma.attachment.findUnique.mockResolvedValue(
+        attachmentFixture({ deletedAt: new Date() }),
       );
-      prisma.attachment.findUnique.mockResolvedValue({
-        id: 'att-1',
-        taskId: 'task-1',
-        uploaderId: 'user-1',
-        storageKey: 'key-1',
-        deletedAt: new Date(),
-      });
 
       await expect(service.remove('user-1', 'task-1', 'att-1')).rejects.toBeInstanceOf(
         NotFoundException,
@@ -244,23 +188,10 @@ describe('AttachmentsService', () => {
   });
 
   describe('restore', () => {
-    const membershipOf = (role: WorkspaceRole) => ({ role });
-
     it("rejects a MEMBER restoring someone else's attachment", async () => {
-      prisma.task.findUnique.mockResolvedValue({
-        id: 'task-1',
-        project: { workspaceId: 'ws-1' },
-      });
-      prisma.workspaceMember.findUnique.mockResolvedValue(
-        membershipOf(WorkspaceRole.MEMBER),
+      prisma.attachment.findUnique.mockResolvedValue(
+        attachmentFixture({ uploaderId: 'user-2', deletedAt: new Date() }),
       );
-      prisma.attachment.findUnique.mockResolvedValue({
-        id: 'att-1',
-        taskId: 'task-1',
-        uploaderId: 'user-2',
-        storageKey: 'key-1',
-        deletedAt: new Date(),
-      });
 
       await expect(service.restore('user-1', 'task-1', 'att-1')).rejects.toBeInstanceOf(
         ForbiddenException,
@@ -269,20 +200,9 @@ describe('AttachmentsService', () => {
     });
 
     it('allows the uploader to restore their own soft-deleted attachment', async () => {
-      prisma.task.findUnique.mockResolvedValue({
-        id: 'task-1',
-        project: { workspaceId: 'ws-1' },
-      });
-      prisma.workspaceMember.findUnique.mockResolvedValue(
-        membershipOf(WorkspaceRole.MEMBER),
+      prisma.attachment.findUnique.mockResolvedValue(
+        attachmentFixture({ deletedAt: new Date() }),
       );
-      prisma.attachment.findUnique.mockResolvedValue({
-        id: 'att-1',
-        taskId: 'task-1',
-        uploaderId: 'user-1',
-        storageKey: 'key-1',
-        deletedAt: new Date(),
-      });
       prisma.attachment.update.mockResolvedValue({ id: 'att-1', deletedAt: null });
 
       await service.restore('user-1', 'task-1', 'att-1');
@@ -294,20 +214,10 @@ describe('AttachmentsService', () => {
     });
 
     it("allows an ADMIN to restore someone else's attachment", async () => {
-      prisma.task.findUnique.mockResolvedValue({
-        id: 'task-1',
-        project: { workspaceId: 'ws-1' },
-      });
-      prisma.workspaceMember.findUnique.mockResolvedValue(
-        membershipOf(WorkspaceRole.ADMIN),
+      prisma.workspaceMember.findUnique.mockResolvedValue(membershipOf(WorkspaceRole.ADMIN));
+      prisma.attachment.findUnique.mockResolvedValue(
+        attachmentFixture({ uploaderId: 'user-2', deletedAt: new Date() }),
       );
-      prisma.attachment.findUnique.mockResolvedValue({
-        id: 'att-1',
-        taskId: 'task-1',
-        uploaderId: 'user-2',
-        storageKey: 'key-1',
-        deletedAt: new Date(),
-      });
       prisma.attachment.update.mockResolvedValue({ id: 'att-1', deletedAt: null });
 
       await service.restore('user-1', 'task-1', 'att-1');
@@ -318,16 +228,8 @@ describe('AttachmentsService', () => {
 
   describe('getDownload', () => {
     it('returns the attachment and a readable stream', async () => {
-      prisma.task.findUnique.mockResolvedValue({
-        id: 'task-1',
-        project: { workspaceId: 'ws-1' },
-      });
-      prisma.workspaceMember.findUnique.mockResolvedValue({ role: WorkspaceRole.VIEWER });
-      prisma.attachment.findUnique.mockResolvedValue({
-        id: 'att-1',
-        taskId: 'task-1',
-        storageKey: 'key-1',
-      });
+      prisma.workspaceMember.findUnique.mockResolvedValue(membershipOf(WorkspaceRole.VIEWER));
+      prisma.attachment.findUnique.mockResolvedValue(attachmentFixture());
       const stream = new Readable();
       storage.getStream.mockReturnValue(stream);
 
