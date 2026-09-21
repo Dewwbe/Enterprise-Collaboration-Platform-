@@ -29,6 +29,7 @@ src/
   notifications/                # notification read-model + WebSocket gateway
   queue/                         # BullMQ: event listener, delivery/reminder/summary/cleanup processors
   email/                         # EmailService (SMTP)
+  health/                        # liveness/readiness check (Postgres, Redis, memory) via @nestjs/terminus
 ```
 
 ## Request-time RBAC

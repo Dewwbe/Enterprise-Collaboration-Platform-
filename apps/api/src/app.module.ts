@@ -19,6 +19,7 @@ import { QueueModule } from './queue/queue.module';
 import { RedisModule } from './redis/redis.module';
 import { StorageModule } from './storage/storage.module';
 import { AttachmentsModule } from './attachments/attachments.module';
+import { HealthModule } from './health/health.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { GlobalExceptionFilter } from './common/filters/http-exception.filter';
 import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
@@ -61,6 +62,7 @@ import { AuditLogInterceptor } from './common/interceptors/audit-log.interceptor
     EmailModule,
     QueueModule,
     AttachmentsModule,
+    HealthModule,
   ],
   providers: [
     // Order matters: rate limiting first, then authentication, so unauthenticated
