@@ -152,6 +152,11 @@ running. Summary by resource:
 - `GET /` — paginated, own notifications · `PATCH /:id/read`
 - Also pushed live over WebSocket (`NotificationsGateway`) as they're created.
 
+**Health** (`/api/v1/health`)
+- `GET /` — unauthenticated liveness/readiness check (Postgres, Redis, process
+  memory); `200` when healthy, `503` otherwise. Used by Docker Compose's `api`
+  healthcheck.
+
 ## Async architecture
 
 Feature services emit domain events (`TaskAssignedEvent`, `TaskCompletedEvent`,
@@ -188,4 +193,4 @@ rather than relying on TTL alone.
 
 - Attachment storage is local-disk only; the `StorageService` interface exists for a cloud backend but none is implemented yet.
 - Soft-delete is partial: `Organization`/`Workspace`/`Project` support archive/restore; `Task`/`Comment`/`Attachment` are hard-deleted.
-- No CI pipeline, health endpoint, full-text search, or OpenTelemetry tracing yet (bonus scope, requirement §25).
+- No full-text search, project templates, or OpenTelemetry tracing yet (bonus scope, requirement §25).

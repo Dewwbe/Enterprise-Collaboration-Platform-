@@ -10,6 +10,7 @@ describe('CacheService', () => {
     del: jest.Mock;
     scan: jest.Mock;
     quit: jest.Mock;
+    ping: jest.Mock;
   };
 
   beforeEach(async () => {
@@ -19,6 +20,7 @@ describe('CacheService', () => {
       del: jest.fn(),
       scan: jest.fn(),
       quit: jest.fn(),
+      ping: jest.fn(),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -73,6 +75,20 @@ describe('CacheService', () => {
       expect(redis.scan).toHaveBeenCalledTimes(2);
       expect(redis.del).toHaveBeenCalledWith('a:1', 'a:2');
       expect(redis.del).toHaveBeenCalledWith('a:3');
+    });
+  });
+
+  describe('ping', () => {
+    it('returns true when Redis replies PONG', async () => {
+      redis.ping.mockResolvedValue('PONG');
+
+      await expect(service.ping()).resolves.toBe(true);
+    });
+
+    it('returns false when Redis throws', async () => {
+      redis.ping.mockRejectedValue(new Error('connection refused'));
+
+      await expect(service.ping()).resolves.toBe(false);
     });
   });
 
