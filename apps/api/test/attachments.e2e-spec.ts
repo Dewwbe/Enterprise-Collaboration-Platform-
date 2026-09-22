@@ -111,7 +111,7 @@ describe('Attachments (e2e)', () => {
       .set('Authorization', `Bearer ${viewer.accessToken}`)
       .expect(200);
 
-    expect(res.body.data.map((a: { id: string }) => a.id)).toContain(attachmentId);
+    expect(res.body.data.items.map((a: { id: string }) => a.id)).toContain(attachmentId);
   });
 
   it('downloads the attachment content back unchanged', async () => {

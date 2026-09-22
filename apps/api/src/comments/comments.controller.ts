@@ -9,12 +9,14 @@ import {
   ParseUUIDPipe,
   Patch,
   Post,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { CommentsService } from './comments.service';
 import { CreateCommentDto } from './dto/create-comment.dto';
 import { UpdateCommentDto } from './dto/update-comment.dto';
+import { QueryCommentsDto } from './dto/query-comments.dto';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { AuditLog } from '../common/decorators/audit-log.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
@@ -41,12 +43,16 @@ export class CommentsController {
   }
 
   @Get()
-  @ApiOperation({ summary: 'List comments on a task' })
+  @ApiOperation({
+    summary: 'List comments on a task',
+    description: 'Supports ?page=&limit=',
+  })
   findAll(
     @CurrentUser('userId') userId: string,
     @Param('taskId', ParseUUIDPipe) taskId: string,
+    @Query() query: QueryCommentsDto,
   ) {
-    return this.commentsService.findAll(userId, taskId);
+    return this.commentsService.findAll(userId, taskId, query);
   }
 
   @Patch(':commentId')

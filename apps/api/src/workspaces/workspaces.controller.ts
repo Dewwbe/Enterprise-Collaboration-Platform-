@@ -9,6 +9,7 @@ import {
   ParseUUIDPipe,
   Patch,
   Post,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
@@ -16,6 +17,7 @@ import { WorkspacesService } from './workspaces.service';
 import { CreateWorkspaceDto } from './dto/create-workspace.dto';
 import { UpdateWorkspaceDto } from './dto/update-workspace.dto';
 import { InviteWorkspaceMemberDto } from './dto/invite-workspace-member.dto';
+import { QueryWorkspacesDto } from './dto/query-workspaces.dto';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
 import { RolesGuard } from '../common/guards/roles.guard';
@@ -35,9 +37,12 @@ export class WorkspacesController {
   }
 
   @Get()
-  @ApiOperation({ summary: 'List workspaces the caller belongs to' })
-  findAll(@CurrentUser('userId') userId: string) {
-    return this.workspacesService.findAllForUser(userId);
+  @ApiOperation({
+    summary: 'List workspaces the caller belongs to',
+    description: 'Supports ?search=&page=&limit=',
+  })
+  findAll(@CurrentUser('userId') userId: string, @Query() query: QueryWorkspacesDto) {
+    return this.workspacesService.findAllForUser(userId, query);
   }
 
   @Get(':workspaceId')

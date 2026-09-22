@@ -18,7 +18,7 @@ export function DashboardPage() {
           api.workspaces.list(),
         ]);
         setOrganizations(orgs);
-        setWorkspaces(ws);
+        setWorkspaces(ws.items);
       } catch (err) {
         setError(err instanceof ApiError ? err.message : 'Failed to load dashboard.');
       } finally {
