@@ -6,6 +6,7 @@ import type {
   CreateWorkspaceInput,
   LoginInput,
   Organization,
+  PaginatedResult,
   RegisterInput,
   UserProfile,
   Workspace,
@@ -130,7 +131,7 @@ export const api = {
       }),
   },
   workspaces: {
-    list: () => request<Workspace[]>('/workspaces'),
+    list: () => request<PaginatedResult<Workspace>>('/workspaces'),
     get: (id: string) => request<Workspace>(`/workspaces/${id}`),
     create: (input: CreateWorkspaceInput) =>
       request<Workspace>('/workspaces', {

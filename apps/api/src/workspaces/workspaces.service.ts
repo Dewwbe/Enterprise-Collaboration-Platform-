@@ -8,6 +8,7 @@ import { EventEmitter2 } from '@nestjs/event-emitter';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateWorkspaceDto } from './dto/create-workspace.dto';
 import { UpdateWorkspaceDto } from './dto/update-workspace.dto';
+import { QueryWorkspacesDto } from './dto/query-workspaces.dto';
 import { WorkspaceRole } from '../common/enums/workspace-role.enum';
 import { TaskStatus } from '../common/enums/task-status.enum';
 import { USER_INVITED_EVENT, UserInvitedEvent } from '../common/events';
@@ -65,11 +66,28 @@ export class WorkspacesService {
     });
   }
 
-  async findAllForUser(userId: string) {
-    return this.prisma.workspace.findMany({
-      where: { members: { some: { userId } }, isArchived: false },
-      orderBy: { createdAt: 'desc' },
-    });
+  async findAllForUser(userId: string, query: QueryWorkspacesDto) {
+    const page = query.page ?? 1;
+    const limit = query.limit ?? 20;
+    const where = {
+      members: { some: { userId } },
+      isArchived: false,
+      ...(query.search
+        ? { name: { contains: query.search, mode: 'insensitive' as const } }
+        : {}),
+    };
+
+    const [items, total] = await Promise.all([
+      this.prisma.workspace.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      this.prisma.workspace.count({ where }),
+    ]);
+
+    return { items, total, page, limit, totalPages: Math.ceil(total / limit) };
   }
 
   async findOne(userId: string, workspaceId: string) {
