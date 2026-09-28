@@ -3,6 +3,7 @@ import { EventEmitter2 } from '@nestjs/event-emitter';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateCommentDto } from './dto/create-comment.dto';
 import { UpdateCommentDto } from './dto/update-comment.dto';
+import { QueryCommentsDto } from './dto/query-comments.dto';
 import { WorkspaceRole } from '../common/enums/workspace-role.enum';
 import { COMMENT_ADDED_EVENT, CommentAddedEvent } from '../common/events';
 import { WorkspaceAccessService } from '../common/access/workspace-access.service';
@@ -70,12 +71,24 @@ export class CommentsService {
     return comment;
   }
 
-  async findAll(userId: string, taskId: string) {
+  async findAll(userId: string, taskId: string, query: QueryCommentsDto) {
     await this.workspaceAccess.requireTaskMembership(taskId, userId);
-    return this.prisma.comment.findMany({
-      where: { taskId, deletedAt: null },
-      orderBy: { createdAt: 'asc' },
-    });
+
+    const page = query.page ?? 1;
+    const limit = query.limit ?? 20;
+    const where = { taskId, deletedAt: null };
+
+    const [items, total] = await Promise.all([
+      this.prisma.comment.findMany({
+        where,
+        orderBy: { createdAt: 'asc' },
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      this.prisma.comment.count({ where }),
+    ]);
+
+    return { items, total, page, limit, totalPages: Math.ceil(total / limit) };
   }
 
   async update(userId: string, taskId: string, commentId: string, dto: UpdateCommentDto) {

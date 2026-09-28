@@ -16,6 +16,14 @@ export interface ApiSuccessResponse<T> {
   data: T;
 }
 
+export interface PaginatedResult<T> {
+  items: T[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+}
+
 export interface ApiErrorResponse {
   success: false;
   statusCode: number;

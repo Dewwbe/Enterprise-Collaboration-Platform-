@@ -7,6 +7,7 @@ import {
   Param,
   ParseUUIDPipe,
   Post,
+  Query,
   Res,
   UploadedFile,
   UseGuards,
@@ -22,6 +23,7 @@ import {
 } from '@nestjs/swagger';
 import type { Response } from 'express';
 import { AttachmentsService } from './attachments.service';
+import { QueryAttachmentsDto } from './dto/query-attachments.dto';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { AuditLog } from '../common/decorators/audit-log.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
@@ -59,12 +61,16 @@ export class AttachmentsController {
   }
 
   @Get()
-  @ApiOperation({ summary: 'List attachments on a task' })
+  @ApiOperation({
+    summary: 'List attachments on a task',
+    description: 'Supports ?page=&limit=',
+  })
   findAll(
     @CurrentUser('userId') userId: string,
     @Param('taskId', ParseUUIDPipe) taskId: string,
+    @Query() query: QueryAttachmentsDto,
   ) {
-    return this.attachmentsService.findAll(userId, taskId);
+    return this.attachmentsService.findAll(userId, taskId, query);
   }
 
   @Get(':attachmentId/download')
