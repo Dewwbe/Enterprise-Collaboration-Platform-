@@ -3,13 +3,28 @@ import type {
   ApiSuccessResponse,
   AuthResponse,
   CreateOrganizationInput,
+  CreateProjectInput,
+  CreateTaskInput,
   CreateWorkspaceInput,
+  InviteMemberInput,
   LoginInput,
+  Notification,
   Organization,
   PaginatedResult,
+  Project,
+  QueryNotificationsInput,
+  QueryProjectsInput,
+  QueryTasksInput,
   RegisterInput,
+  Task,
+  UpdateOrganizationInput,
+  UpdateProjectInput,
+  UpdateTaskInput,
+  UpdateWorkspaceInput,
+  UserDashboard,
   UserProfile,
   Workspace,
+  WorkspaceStats,
 } from '@ecp/shared-types';
 
 const API_BASE = import.meta.env.VITE_API_URL ?? '/api/v1';
@@ -83,6 +98,17 @@ async function request<T>(
   return (body as ApiSuccessResponse<T>).data;
 }
 
+function toQueryString(params: object): string {
+  const search = new URLSearchParams();
+  for (const [key, value] of Object.entries(params as Record<string, unknown>)) {
+    if (value !== undefined && value !== null && value !== '') {
+      search.set(key, String(value));
+    }
+  }
+  const qs = search.toString();
+  return qs ? `?${qs}` : '';
+}
+
 async function refreshTokens(): Promise<boolean> {
   try {
     const data = await request<AuthResponse>(
@@ -120,6 +146,9 @@ export const api = {
   },
   users: {
     me: () => request<UserProfile>('/users/me'),
+    dashboard: () => request<UserDashboard>('/users/me/dashboard'),
+    lookup: (email: string) =>
+      request<UserProfile>(`/users/lookup?email=${encodeURIComponent(email)}`),
   },
   organizations: {
     list: () => request<Organization[]>('/organizations'),
@@ -129,14 +158,97 @@ export const api = {
         method: 'POST',
         body: JSON.stringify(input),
       }),
+    update: (id: string, input: UpdateOrganizationInput) =>
+      request<Organization>(`/organizations/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify(input),
+      }),
+    archive: (id: string) =>
+      request<Organization>(`/organizations/${id}/archive`, { method: 'POST' }),
+    remove: (id: string) => request<void>(`/organizations/${id}`, { method: 'DELETE' }),
+    inviteMember: (id: string, input: InviteMemberInput) =>
+      request(`/organizations/${id}/members`, {
+        method: 'POST',
+        body: JSON.stringify(input),
+      }),
   },
   workspaces: {
-    list: () => request<PaginatedResult<Workspace>>('/workspaces'),
+    // The API paginates this list; callers want every workspace, so request the max page size.
+    list: async () =>
+      (await request<PaginatedResult<Workspace>>('/workspaces?limit=100')).items,
     get: (id: string) => request<Workspace>(`/workspaces/${id}`),
+    getStats: (id: string) => request<WorkspaceStats>(`/workspaces/${id}/stats`),
     create: (input: CreateWorkspaceInput) =>
       request<Workspace>('/workspaces', {
         method: 'POST',
         body: JSON.stringify(input),
       }),
+    update: (id: string, input: UpdateWorkspaceInput) =>
+      request<Workspace>(`/workspaces/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify(input),
+      }),
+    archive: (id: string) =>
+      request<Workspace>(`/workspaces/${id}/archive`, { method: 'POST' }),
+    remove: (id: string) => request<void>(`/workspaces/${id}`, { method: 'DELETE' }),
+    inviteMember: (id: string, input: InviteMemberInput) =>
+      request(`/workspaces/${id}/members`, {
+        method: 'POST',
+        body: JSON.stringify(input),
+      }),
+  },
+  projects: {
+    list: (workspaceId: string, query: QueryProjectsInput = {}) =>
+      request<PaginatedResult<Project>>(
+        `/workspaces/${workspaceId}/projects${toQueryString(query)}`,
+      ),
+    get: (workspaceId: string, projectId: string) =>
+      request<Project>(`/workspaces/${workspaceId}/projects/${projectId}`),
+    create: (workspaceId: string, input: CreateProjectInput) =>
+      request<Project>(`/workspaces/${workspaceId}/projects`, {
+        method: 'POST',
+        body: JSON.stringify(input),
+      }),
+    update: (workspaceId: string, projectId: string, input: UpdateProjectInput) =>
+      request<Project>(`/workspaces/${workspaceId}/projects/${projectId}`, {
+        method: 'PATCH',
+        body: JSON.stringify(input),
+      }),
+    archive: (workspaceId: string, projectId: string) =>
+      request<Project>(`/workspaces/${workspaceId}/projects/${projectId}/archive`, {
+        method: 'POST',
+      }),
+    restore: (workspaceId: string, projectId: string) =>
+      request<Project>(`/workspaces/${workspaceId}/projects/${projectId}/restore`, {
+        method: 'POST',
+      }),
+    remove: (workspaceId: string, projectId: string) =>
+      request<void>(`/workspaces/${workspaceId}/projects/${projectId}`, { method: 'DELETE' }),
+  },
+  tasks: {
+    list: (projectId: string, query: QueryTasksInput = {}) =>
+      request<PaginatedResult<Task>>(`/projects/${projectId}/tasks${toQueryString(query)}`),
+    get: (projectId: string, taskId: string) =>
+      request<Task>(`/projects/${projectId}/tasks/${taskId}`),
+    create: (projectId: string, input: CreateTaskInput) =>
+      request<Task>(`/projects/${projectId}/tasks`, {
+        method: 'POST',
+        body: JSON.stringify(input),
+      }),
+    update: (projectId: string, taskId: string, input: UpdateTaskInput) =>
+      request<Task>(`/projects/${projectId}/tasks/${taskId}`, {
+        method: 'PATCH',
+        body: JSON.stringify(input),
+      }),
+    remove: (projectId: string, taskId: string) =>
+      request<void>(`/projects/${projectId}/tasks/${taskId}`, { method: 'DELETE' }),
+    restore: (projectId: string, taskId: string) =>
+      request<Task>(`/projects/${projectId}/tasks/${taskId}/restore`, { method: 'POST' }),
+  },
+  notifications: {
+    list: (query: QueryNotificationsInput = {}) =>
+      request<PaginatedResult<Notification>>(`/notifications${toQueryString(query)}`),
+    markRead: (id: string) =>
+      request<Notification>(`/notifications/${id}/read`, { method: 'PATCH' }),
   },
 };
