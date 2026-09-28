@@ -173,7 +173,9 @@ export const api = {
       }),
   },
   workspaces: {
-    list: () => request<Workspace[]>('/workspaces'),
+    // The API paginates this list; callers want every workspace, so request the max page size.
+    list: async () =>
+      (await request<PaginatedResult<Workspace>>('/workspaces?limit=100')).items,
     get: (id: string) => request<Workspace>(`/workspaces/${id}`),
     getStats: (id: string) => request<WorkspaceStats>(`/workspaces/${id}/stats`),
     create: (input: CreateWorkspaceInput) =>

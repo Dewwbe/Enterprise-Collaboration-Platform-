@@ -12,6 +12,7 @@ import { STORAGE_SERVICE, StorageService } from '../storage/storage.interface';
 import { ROLE_HIERARCHY, WorkspaceRole } from '../common/enums/workspace-role.enum';
 import { ALLOWED_MIME_TYPES } from './attachments.constants';
 import { WorkspaceAccessService } from '../common/access/workspace-access.service';
+import { QueryAttachmentsDto } from './dto/query-attachments.dto';
 
 @Injectable()
 export class AttachmentsService {
@@ -72,12 +73,24 @@ export class AttachmentsService {
     });
   }
 
-  async findAll(userId: string, taskId: string) {
+  async findAll(userId: string, taskId: string, query: QueryAttachmentsDto) {
     await this.workspaceAccess.requireTaskMembership(taskId, userId);
-    return this.prisma.attachment.findMany({
-      where: { taskId, deletedAt: null },
-      orderBy: { createdAt: 'desc' },
-    });
+
+    const page = query.page ?? 1;
+    const limit = query.limit ?? 20;
+    const where = { taskId, deletedAt: null };
+
+    const [items, total] = await Promise.all([
+      this.prisma.attachment.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      this.prisma.attachment.count({ where }),
+    ]);
+
+    return { items, total, page, limit, totalPages: Math.ceil(total / limit) };
   }
 
   private async requireAttachment(taskId: string, attachmentId: string) {
