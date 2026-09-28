@@ -75,12 +75,24 @@ export class AttachmentsService {
   async findAll(userId: string, taskId: string) {
     await this.workspaceAccess.requireTaskMembership(taskId, userId);
     return this.prisma.attachment.findMany({
-      where: { taskId },
+      where: { taskId, deletedAt: null },
       orderBy: { createdAt: 'desc' },
     });
   }
 
   private async requireAttachment(taskId: string, attachmentId: string) {
+    const attachment = await this.prisma.attachment.findUnique({
+      where: { id: attachmentId },
+    });
+    if (!attachment || attachment.taskId !== taskId || attachment.deletedAt) {
+      throw new NotFoundException('Attachment not found.');
+    }
+    return attachment;
+  }
+
+  // Restore needs to find an attachment requireAttachment would now 404 on
+  // (it's soft-deleted), so it looks the row up directly instead.
+  private async requireDeletedAttachment(taskId: string, attachmentId: string) {
     const attachment = await this.prisma.attachment.findUnique({
       where: { id: attachmentId },
     });
@@ -97,7 +109,10 @@ export class AttachmentsService {
   }
 
   async remove(userId: string, taskId: string, attachmentId: string) {
-    const { membership } = await this.workspaceAccess.requireTaskMembership(taskId, userId);
+    const { membership } = await this.workspaceAccess.requireTaskMembership(
+      taskId,
+      userId,
+    );
     const attachment = await this.requireAttachment(taskId, attachmentId);
 
     // Uploader can always remove their own file; ADMIN/OWNER can also clean
@@ -111,7 +126,33 @@ export class AttachmentsService {
       throw new ForbiddenException('You can only delete your own attachments.');
     }
 
-    await this.prisma.attachment.delete({ where: { id: attachmentId } });
-    await this.storage.delete(attachment.storageKey);
+    // Soft delete only: the physical file is kept on storage so restore()
+    // can bring the attachment back intact. Nothing currently purges it -
+    // see Known gaps in README.md.
+    await this.prisma.attachment.update({
+      where: { id: attachmentId },
+      data: { deletedAt: new Date() },
+    });
+  }
+
+  async restore(userId: string, taskId: string, attachmentId: string) {
+    const { membership } = await this.workspaceAccess.requireTaskMembership(
+      taskId,
+      userId,
+    );
+    const attachment = await this.requireDeletedAttachment(taskId, attachmentId);
+
+    const isUploader = attachment.uploaderId === userId;
+    const isAdminOrAbove =
+      ROLE_HIERARCHY[membership.role as WorkspaceRole] >=
+      ROLE_HIERARCHY[WorkspaceRole.ADMIN];
+    if (!isUploader && !isAdminOrAbove) {
+      throw new ForbiddenException('You can only restore your own attachments.');
+    }
+
+    return this.prisma.attachment.update({
+      where: { id: attachmentId },
+      data: { deletedAt: null },
+    });
   }
 }

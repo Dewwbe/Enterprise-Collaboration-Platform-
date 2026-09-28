@@ -196,7 +196,7 @@ describe('CommentsService', () => {
       expect(prisma.comment.delete).not.toHaveBeenCalled();
     });
 
-    it('allows the author to delete their own comment', async () => {
+    it('soft deletes a comment (sets deletedAt instead of removing the row)', async () => {
       prisma.task.findUnique.mockResolvedValue({
         id: 'task-1',
         project: { workspaceId: 'ws-1' },
@@ -210,7 +210,73 @@ describe('CommentsService', () => {
 
       await service.remove('user-1', 'task-1', 'c-1');
 
-      expect(prisma.comment.delete).toHaveBeenCalledWith({ where: { id: 'c-1' } });
+      expect(prisma.comment.update).toHaveBeenCalledWith({
+        where: { id: 'c-1' },
+        data: { deletedAt: expect.any(Date) },
+      });
+      expect(prisma.comment.delete).not.toHaveBeenCalled();
+    });
+
+    it('throws NotFoundException for an already soft-deleted comment', async () => {
+      prisma.task.findUnique.mockResolvedValue({
+        id: 'task-1',
+        project: { workspaceId: 'ws-1' },
+      });
+      prisma.workspaceMember.findUnique.mockResolvedValue({ role: WorkspaceRole.MEMBER });
+      prisma.comment.findUnique.mockResolvedValue({
+        id: 'c-1',
+        taskId: 'task-1',
+        authorId: 'user-1',
+        deletedAt: new Date(),
+      });
+
+      await expect(service.remove('user-1', 'task-1', 'c-1')).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
+      expect(prisma.comment.update).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('restore', () => {
+    it("rejects restoring someone else's comment", async () => {
+      prisma.task.findUnique.mockResolvedValue({
+        id: 'task-1',
+        project: { workspaceId: 'ws-1' },
+      });
+      prisma.workspaceMember.findUnique.mockResolvedValue({ role: WorkspaceRole.MEMBER });
+      prisma.comment.findUnique.mockResolvedValue({
+        id: 'c-1',
+        taskId: 'task-1',
+        authorId: 'user-2',
+        deletedAt: new Date(),
+      });
+
+      await expect(service.restore('user-1', 'task-1', 'c-1')).rejects.toBeInstanceOf(
+        ForbiddenException,
+      );
+      expect(prisma.comment.update).not.toHaveBeenCalled();
+    });
+
+    it('allows the author to restore their own soft-deleted comment', async () => {
+      prisma.task.findUnique.mockResolvedValue({
+        id: 'task-1',
+        project: { workspaceId: 'ws-1' },
+      });
+      prisma.workspaceMember.findUnique.mockResolvedValue({ role: WorkspaceRole.MEMBER });
+      prisma.comment.findUnique.mockResolvedValue({
+        id: 'c-1',
+        taskId: 'task-1',
+        authorId: 'user-1',
+        deletedAt: new Date(),
+      });
+      prisma.comment.update.mockResolvedValue({ id: 'c-1', deletedAt: null });
+
+      await service.restore('user-1', 'task-1', 'c-1');
+
+      expect(prisma.comment.update).toHaveBeenCalledWith({
+        where: { id: 'c-1' },
+        data: { deletedAt: null },
+      });
     });
   });
 });

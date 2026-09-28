@@ -60,13 +60,13 @@ export class WorkspaceAccessService {
     return { project, membership };
   }
 
-  /** Resolves membership by joining task -> project -> workspace. */
+  /** Resolves membership by joining task -> project -> workspace. A soft-deleted task is treated as not found, same as a missing one. */
   async requireTaskMembership(taskId: string, userId: string) {
     const task = await this.prisma.task.findUnique({
       where: { id: taskId },
       include: { project: true },
     });
-    if (!task) {
+    if (!task || task.deletedAt) {
       throw new NotFoundException('Task not found.');
     }
     const membership = await this.requireWorkspaceMembership(

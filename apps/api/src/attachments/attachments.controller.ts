@@ -91,12 +91,28 @@ export class AttachmentsController {
   @Delete(':attachmentId')
   @HttpCode(HttpStatus.NO_CONTENT)
   @AuditLog('attachment.delete', 'Attachment', 'attachmentId')
-  @ApiOperation({ summary: 'Delete an attachment (uploader, or ADMIN/OWNER)' })
+  @ApiOperation({
+    summary: 'Delete an attachment (uploader, or ADMIN/OWNER)',
+    description: 'Soft delete - recoverable via POST /:attachmentId/restore.',
+  })
   remove(
     @CurrentUser('userId') userId: string,
     @Param('taskId', ParseUUIDPipe) taskId: string,
     @Param('attachmentId', ParseUUIDPipe) attachmentId: string,
   ) {
     return this.attachmentsService.remove(userId, taskId, attachmentId);
+  }
+
+  @Post(':attachmentId/restore')
+  @AuditLog('attachment.restore', 'Attachment', 'attachmentId')
+  @ApiOperation({
+    summary: 'Restore a soft-deleted attachment (uploader, or ADMIN/OWNER)',
+  })
+  restore(
+    @CurrentUser('userId') userId: string,
+    @Param('taskId', ParseUUIDPipe) taskId: string,
+    @Param('attachmentId', ParseUUIDPipe) attachmentId: string,
+  ) {
+    return this.attachmentsService.restore(userId, taskId, attachmentId);
   }
 }

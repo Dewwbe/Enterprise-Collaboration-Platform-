@@ -88,12 +88,29 @@ export class TasksController {
   @Roles(WorkspaceRole.ADMIN)
   @HttpCode(HttpStatus.NO_CONTENT)
   @AuditLog('task.delete', 'Task', 'taskId')
-  @ApiOperation({ summary: 'Delete a task (ADMIN or OWNER only)' })
+  @ApiOperation({
+    summary: 'Delete a task (ADMIN or OWNER only)',
+    description:
+      'Soft delete - the task is hidden but recoverable via POST /:taskId/restore.',
+  })
   remove(
     @CurrentUser('userId') userId: string,
     @Param('projectId', ParseUUIDPipe) projectId: string,
     @Param('taskId', ParseUUIDPipe) taskId: string,
   ) {
     return this.tasksService.remove(userId, projectId, taskId);
+  }
+
+  @Post(':taskId/restore')
+  @UseGuards(RolesGuard)
+  @Roles(WorkspaceRole.ADMIN)
+  @AuditLog('task.restore', 'Task', 'taskId')
+  @ApiOperation({ summary: 'Restore a soft-deleted task (ADMIN or OWNER only)' })
+  restore(
+    @CurrentUser('userId') userId: string,
+    @Param('projectId', ParseUUIDPipe) projectId: string,
+    @Param('taskId', ParseUUIDPipe) taskId: string,
+  ) {
+    return this.tasksService.restore(userId, projectId, taskId);
   }
 }
