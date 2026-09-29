@@ -19,6 +19,7 @@ import { UpdateTaskDto } from './dto/update-task.dto';
 import { QueryTasksDto } from './dto/query-tasks.dto';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { WorkspaceScope } from '../common/decorators/workspace-scope.decorator';
+import { AuditLog } from '../common/decorators/audit-log.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { WorkspaceRole } from '../common/enums/workspace-role.enum';
@@ -32,6 +33,9 @@ export class TasksController {
 
   @Post()
   @Roles(WorkspaceRole.MEMBER)
+  @UseGuards(RolesGuard)
+  @Roles(WorkspaceRole.MEMBER)
+  @AuditLog('task.create', 'Task')
   @ApiOperation({ summary: 'Create a task in a project (MEMBER or above)' })
   create(
     @CurrentUser('userId') userId: string,
@@ -64,6 +68,9 @@ export class TasksController {
 
   @Patch(':taskId')
   @Roles(WorkspaceRole.MEMBER)
+  @UseGuards(RolesGuard)
+  @Roles(WorkspaceRole.MEMBER)
+  @AuditLog('task.update', 'Task', 'taskId')
   @ApiOperation({
     summary: 'Update a task (MEMBER or above)',
     description:
@@ -83,5 +90,33 @@ export class TasksController {
   @ApiOperation({ summary: 'Delete a task (ADMIN or OWNER only)' })
   remove(@Param('taskId', ParseUUIDPipe) taskId: string) {
     return this.tasksService.remove(taskId);
+  @UseGuards(RolesGuard)
+  @Roles(WorkspaceRole.ADMIN)
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @AuditLog('task.delete', 'Task', 'taskId')
+  @ApiOperation({
+    summary: 'Delete a task (ADMIN or OWNER only)',
+    description:
+      'Soft delete - the task is hidden but recoverable via POST /:taskId/restore.',
+  })
+  remove(
+    @CurrentUser('userId') userId: string,
+    @Param('projectId', ParseUUIDPipe) projectId: string,
+    @Param('taskId', ParseUUIDPipe) taskId: string,
+  ) {
+    return this.tasksService.remove(userId, projectId, taskId);
+  }
+
+  @Post(':taskId/restore')
+  @UseGuards(RolesGuard)
+  @Roles(WorkspaceRole.ADMIN)
+  @AuditLog('task.restore', 'Task', 'taskId')
+  @ApiOperation({ summary: 'Restore a soft-deleted task (ADMIN or OWNER only)' })
+  restore(
+    @CurrentUser('userId') userId: string,
+    @Param('projectId', ParseUUIDPipe) projectId: string,
+    @Param('taskId', ParseUUIDPipe) taskId: string,
+  ) {
+    return this.tasksService.restore(userId, projectId, taskId);
   }
 }

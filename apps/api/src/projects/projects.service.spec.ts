@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { NotFoundException } from '@nestjs/common';
 import { ProjectsService } from './projects.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { CacheService } from '../redis/cache.service';
 
 describe('ProjectsService', () => {
   let service: ProjectsService;
@@ -9,25 +10,33 @@ describe('ProjectsService', () => {
     project: {
       findUnique: jest.Mock;
       findMany: jest.Mock;
+      count: jest.Mock;
       create: jest.Mock;
       update: jest.Mock;
       delete: jest.Mock;
     };
   };
+  let cache: { get: jest.Mock; set: jest.Mock; del: jest.Mock };
 
   beforeEach(async () => {
     prisma = {
       project: {
         findUnique: jest.fn(),
         findMany: jest.fn(),
+        count: jest.fn().mockResolvedValue(0),
         create: jest.fn(),
         update: jest.fn(),
         delete: jest.fn(),
       },
     };
+    cache = { get: jest.fn(), set: jest.fn(), del: jest.fn() };
 
     const module: TestingModule = await Test.createTestingModule({
-      providers: [ProjectsService, { provide: PrismaService, useValue: prisma }],
+      providers: [
+        ProjectsService,
+        { provide: PrismaService, useValue: prisma },
+        { provide: CacheService, useValue: cache },
+      ],
     }).compile();
 
     service = module.get<ProjectsService>(ProjectsService);
@@ -42,6 +51,7 @@ describe('ProjectsService', () => {
       expect(prisma.project.create).toHaveBeenCalledWith({
         data: { name: 'New Project', description: 'x', workspaceId: 'ws-1' },
       });
+      expect(cache.del).toHaveBeenCalledWith('workspace-stats:ws-1');
     });
   });
 
@@ -71,6 +81,37 @@ describe('ProjectsService', () => {
 
       const args = prisma.project.findMany.mock.calls[0][0];
       expect(args.where.name).toEqual({ contains: 'launch', mode: 'insensitive' });
+    });
+
+    it('defaults to page 1 with a limit of 20', async () => {
+      prisma.workspaceMember.findUnique.mockResolvedValue({ role: 'VIEWER' });
+      prisma.project.findMany.mockResolvedValue([]);
+      prisma.project.count.mockResolvedValue(0);
+
+      await service.findAll('user-1', 'ws-1', {});
+
+      const args = prisma.project.findMany.mock.calls[0][0];
+      expect(args.skip).toBe(0);
+      expect(args.take).toBe(20);
+    });
+
+    it('paginates using the requested page and limit', async () => {
+      prisma.workspaceMember.findUnique.mockResolvedValue({ role: 'VIEWER' });
+      prisma.project.findMany.mockResolvedValue([{ id: 'p-1' }]);
+      prisma.project.count.mockResolvedValue(45);
+
+      const result = await service.findAll('user-1', 'ws-1', { page: 2, limit: 10 });
+
+      const args = prisma.project.findMany.mock.calls[0][0];
+      expect(args.skip).toBe(10);
+      expect(args.take).toBe(10);
+      expect(result).toEqual({
+        items: [{ id: 'p-1' }],
+        total: 45,
+        page: 2,
+        limit: 10,
+        totalPages: 5,
+      });
     });
   });
 
@@ -103,6 +144,7 @@ describe('ProjectsService', () => {
         where: { id: 'proj-1' },
         data: { isArchived: true },
       });
+      expect(cache.del).toHaveBeenCalledWith('workspace-stats:ws-1');
     });
 
     it('sets isArchived false on restore', async () => {
@@ -134,6 +176,7 @@ describe('ProjectsService', () => {
       await service.remove('ws-1', 'proj-1');
 
       expect(prisma.project.delete).toHaveBeenCalledWith({ where: { id: 'proj-1' } });
+      expect(cache.del).toHaveBeenCalledWith('workspace-stats:ws-1');
     });
   });
 });

@@ -1,17 +1,19 @@
-import {
-  ConflictException,
-  ForbiddenException,
-  Injectable,
-  NotFoundException,
-} from '@nestjs/common';
+import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateOrganizationDto } from './dto/create-organization.dto';
 import { UpdateOrganizationDto } from './dto/update-organization.dto';
 import { WorkspaceRole } from '../common/enums/workspace-role.enum';
+import { USER_INVITED_EVENT, UserInvitedEvent } from '../common/events';
+import { WorkspaceAccessService } from '../common/access/workspace-access.service';
 
 @Injectable()
 export class OrganizationsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly eventEmitter: EventEmitter2,
+    private readonly workspaceAccess: WorkspaceAccessService,
+  ) {}
 
   async create(userId: string, dto: CreateOrganizationDto) {
     const existing = await this.prisma.organization.findUnique({
@@ -62,12 +64,12 @@ export class OrganizationsService {
   }
 
   async update(userId: string, id: string, dto: UpdateOrganizationDto) {
-    await this.assertRole(id, userId, [WorkspaceRole.OWNER, WorkspaceRole.ADMIN]);
+    await this.assertOrgRole(id, userId, [WorkspaceRole.OWNER, WorkspaceRole.ADMIN]);
     return this.prisma.organization.update({ where: { id }, data: dto });
   }
 
   async archive(userId: string, id: string) {
-    await this.assertRole(id, userId, [WorkspaceRole.OWNER]);
+    await this.assertOrgRole(id, userId, [WorkspaceRole.OWNER]);
     return this.prisma.organization.update({
       where: { id },
       data: { isArchived: true },
@@ -75,7 +77,7 @@ export class OrganizationsService {
   }
 
   async remove(userId: string, id: string) {
-    await this.assertRole(id, userId, [WorkspaceRole.OWNER]);
+    await this.assertOrgRole(id, userId, [WorkspaceRole.OWNER]);
     await this.prisma.organization.delete({ where: { id } });
   }
 
@@ -85,36 +87,52 @@ export class OrganizationsService {
     inviteeUserId: string,
     role: WorkspaceRole,
   ) {
-    await this.assertRole(organizationId, userId, [
+    await this.assertOrgRole(organizationId, userId, [
       WorkspaceRole.OWNER,
       WorkspaceRole.ADMIN,
     ]);
+    const organization = await this.prisma.organization.findUnique({
+      where: { id: organizationId },
+      select: { name: true },
+    });
 
     const invitee = await this.prisma.user.findUnique({ where: { id: inviteeUserId } });
     if (!invitee) {
       throw new NotFoundException('Invited user does not exist.');
     }
 
-    return this.prisma.organizationMember.upsert({
+    const membership = await this.prisma.organizationMember.upsert({
       where: { organizationId_userId: { organizationId, userId: inviteeUserId } },
       update: { role },
       create: { organizationId, userId: inviteeUserId, role },
     });
+
+    this.eventEmitter.emit(
+      USER_INVITED_EVENT,
+      new UserInvitedEvent(
+        'organization',
+        organizationId,
+        // assertRole above already confirmed the caller's membership in this
+        // organization, so the row is guaranteed to still exist here.
+        organization!.name,
+        inviteeUserId,
+        userId,
+        role,
+      ),
+    );
+
+    return membership;
   }
 
-  private async assertRole(
+  private async assertOrgRole(
     organizationId: string,
     userId: string,
     allowed: WorkspaceRole[],
   ): Promise<void> {
-    const membership = await this.prisma.organizationMember.findUnique({
-      where: { organizationId_userId: { organizationId, userId } },
-    });
-    if (!membership) {
-      throw new NotFoundException('Organization not found.');
-    }
-    if (!allowed.includes(membership.role as WorkspaceRole)) {
-      throw new ForbiddenException('Your role does not permit this action.');
-    }
+    const membership = await this.workspaceAccess.requireOrganizationMembership(
+      organizationId,
+      userId,
+    );
+    this.workspaceAccess.assertRoleIn(membership.role as WorkspaceRole, allowed);
   }
 }

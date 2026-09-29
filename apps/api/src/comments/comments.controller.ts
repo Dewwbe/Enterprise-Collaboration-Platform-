@@ -9,13 +9,16 @@ import {
   ParseUUIDPipe,
   Patch,
   Post,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { CommentsService } from './comments.service';
 import { CreateCommentDto } from './dto/create-comment.dto';
 import { UpdateCommentDto } from './dto/update-comment.dto';
+import { QueryCommentsDto } from './dto/query-comments.dto';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
+import { AuditLog } from '../common/decorators/audit-log.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { WorkspaceRole } from '../common/enums/workspace-role.enum';
@@ -29,6 +32,9 @@ export class CommentsController {
 
   @Post()
   @Roles(WorkspaceRole.MEMBER)
+  @UseGuards(RolesGuard)
+  @Roles(WorkspaceRole.MEMBER)
+  @AuditLog('comment.create', 'Comment')
   @ApiOperation({ summary: 'Add a comment to a task (MEMBER or above)' })
   create(
     @CurrentUser('userId') userId: string,
@@ -47,6 +53,20 @@ export class CommentsController {
 
   @Patch(':commentId')
   @Roles(WorkspaceRole.MEMBER)
+  @ApiOperation({
+    summary: 'List comments on a task',
+    description: 'Supports ?page=&limit=',
+  })
+  findAll(
+    @CurrentUser('userId') userId: string,
+    @Param('taskId', ParseUUIDPipe) taskId: string,
+    @Query() query: QueryCommentsDto,
+  ) {
+    return this.commentsService.findAll(userId, taskId, query);
+  }
+
+  @Patch(':commentId')
+  @AuditLog('comment.update', 'Comment', 'commentId')
   @ApiOperation({ summary: 'Edit your own comment' })
   update(
     @CurrentUser('userId') userId: string,
@@ -60,12 +80,27 @@ export class CommentsController {
   @Delete(':commentId')
   @Roles(WorkspaceRole.MEMBER)
   @HttpCode(HttpStatus.NO_CONTENT)
-  @ApiOperation({ summary: 'Delete your own comment' })
+  @AuditLog('comment.delete', 'Comment', 'commentId')
+  @ApiOperation({
+    summary: 'Delete your own comment',
+    description: 'Soft delete - recoverable via POST /:commentId/restore.',
+  })
   remove(
     @CurrentUser('userId') userId: string,
     @Param('taskId', ParseUUIDPipe) taskId: string,
     @Param('commentId', ParseUUIDPipe) commentId: string,
   ) {
     return this.commentsService.remove(userId, taskId, commentId);
+  }
+
+  @Post(':commentId/restore')
+  @AuditLog('comment.restore', 'Comment', 'commentId')
+  @ApiOperation({ summary: 'Restore your own soft-deleted comment' })
+  restore(
+    @CurrentUser('userId') userId: string,
+    @Param('taskId', ParseUUIDPipe) taskId: string,
+    @Param('commentId', ParseUUIDPipe) commentId: string,
+  ) {
+    return this.commentsService.restore(userId, taskId, commentId);
   }
 }

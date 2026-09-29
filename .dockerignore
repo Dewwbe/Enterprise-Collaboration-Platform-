@@ -1,0 +1,16 @@
+# Keeps `COPY . .` in apps/api/Dockerfile and apps/web/Dockerfile from
+# pulling secrets, VCS history, or generated artifacts into an image layer.
+**/node_modules
+**/.git
+**/.env
+**/.env.*
+!**/.env.example
+**/dist
+**/build
+**/coverage
+**/*.tsbuildinfo
+**/uploads
+**/*.log
+.vscode
+.idea
+**/.DS_Store
