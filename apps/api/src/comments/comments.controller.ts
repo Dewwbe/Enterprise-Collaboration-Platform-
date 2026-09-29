@@ -25,11 +25,13 @@ import { WorkspaceRole } from '../common/enums/workspace-role.enum';
 
 @ApiTags('comments')
 @ApiBearerAuth()
+@UseGuards(RolesGuard)
 @Controller('tasks/:taskId/comments')
 export class CommentsController {
   constructor(private readonly commentsService: CommentsService) {}
 
   @Post()
+  @Roles(WorkspaceRole.MEMBER)
   @UseGuards(RolesGuard)
   @Roles(WorkspaceRole.MEMBER)
   @AuditLog('comment.create', 'Comment')
@@ -43,6 +45,14 @@ export class CommentsController {
   }
 
   @Get()
+  @Roles(WorkspaceRole.VIEWER)
+  @ApiOperation({ summary: 'List comments on a task' })
+  findAll(@Param('taskId', ParseUUIDPipe) taskId: string) {
+    return this.commentsService.findAll(taskId);
+  }
+
+  @Patch(':commentId')
+  @Roles(WorkspaceRole.MEMBER)
   @ApiOperation({
     summary: 'List comments on a task',
     description: 'Supports ?page=&limit=',
@@ -68,6 +78,7 @@ export class CommentsController {
   }
 
   @Delete(':commentId')
+  @Roles(WorkspaceRole.MEMBER)
   @HttpCode(HttpStatus.NO_CONTENT)
   @AuditLog('comment.delete', 'Comment', 'commentId')
   @ApiOperation({

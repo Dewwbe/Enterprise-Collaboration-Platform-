@@ -19,6 +19,12 @@ import { WorkspaceAccessService } from '../common/access/workspace-access.servic
 
 @Injectable()
 export class TasksService {
+  constructor(private readonly prisma: PrismaService) {}
+
+  // Workspace membership/role is already enforced by RolesGuard before this runs
+  // (see tasks.controller.ts, which resolves :projectId/:taskId via
+  // WorkspaceScopeResolver). This only validates that a given assignee actually
+  // belongs to the same workspace as the task.
   constructor(
     private readonly prisma: PrismaService,
     private readonly eventEmitter: EventEmitter2,
@@ -73,6 +79,12 @@ export class TasksService {
     }
   }
 
+  async create(
+    userId: string,
+    projectId: string,
+    workspaceId: string,
+    dto: CreateTaskDto,
+  ) {
   async create(userId: string, projectId: string, dto: CreateTaskDto) {
     const { project, membership } = await this.workspaceAccess.requireProjectMembership(
       projectId,
@@ -84,7 +96,7 @@ export class TasksService {
     );
 
     if (dto.assigneeId) {
-      await this.requireWorkspaceMember(project.workspaceId, dto.assigneeId);
+      await this.requireWorkspaceMember(workspaceId, dto.assigneeId);
     }
 
     const task = await this.prisma.task.create({
@@ -119,6 +131,7 @@ export class TasksService {
     return task;
   }
 
+  async findAll(projectId: string, query: QueryTasksDto) {
   async findAll(userId: string, projectId: string, query: QueryTasksDto) {
     await this.workspaceAccess.requireProjectMembership(projectId, userId);
 
@@ -160,6 +173,16 @@ export class TasksService {
     return { items, total, page, limit, totalPages: Math.ceil(total / limit) };
   }
 
+  async findOne(taskId: string) {
+    const task = await this.prisma.task.findUnique({ where: { id: taskId } });
+    if (!task) {
+      throw new NotFoundException('Task not found.');
+    }
+    return task;
+  }
+
+  async update(taskId: string, workspaceId: string, dto: UpdateTaskDto) {
+    const task = await this.findOne(taskId);
   async findOne(userId: string, projectId: string, taskId: string) {
     const { task } = await this.requireTaskInProject(projectId, taskId, userId);
     return task;
@@ -177,7 +200,7 @@ export class TasksService {
     );
 
     if (dto.assigneeId) {
-      await this.requireWorkspaceMember(task.project.workspaceId, dto.assigneeId);
+      await this.requireWorkspaceMember(workspaceId, dto.assigneeId);
     }
 
     if (dto.status && dto.status !== task.status) {
@@ -242,6 +265,9 @@ export class TasksService {
     return updated;
   }
 
+  async remove(taskId: string) {
+    await this.findOne(taskId);
+    await this.prisma.task.delete({ where: { id: taskId } });
   async remove(userId: string, projectId: string, taskId: string) {
     const { task, membership } = await this.requireTaskInProject(
       projectId,

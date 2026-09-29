@@ -26,6 +26,7 @@ import { AuditLog } from '../common/decorators/audit-log.decorator';
 
 @ApiTags('workspaces')
 @ApiBearerAuth()
+@UseGuards(RolesGuard)
 @Controller('workspaces')
 export class WorkspacesController {
   constructor(private readonly workspacesService: WorkspacesService) {}
@@ -46,12 +47,10 @@ export class WorkspacesController {
   }
 
   @Get(':workspaceId')
+  @Roles(WorkspaceRole.VIEWER)
   @ApiOperation({ summary: 'Get a workspace by id' })
-  findOne(
-    @CurrentUser('userId') userId: string,
-    @Param('workspaceId', ParseUUIDPipe) workspaceId: string,
-  ) {
-    return this.workspacesService.findOne(userId, workspaceId);
+  findOne(@Param('workspaceId', ParseUUIDPipe) workspaceId: string) {
+    return this.workspacesService.findOne(workspaceId);
   }
 
   @Get(':workspaceId/stats')
@@ -68,7 +67,6 @@ export class WorkspacesController {
   }
 
   @Patch(':workspaceId')
-  @UseGuards(RolesGuard)
   @Roles(WorkspaceRole.ADMIN)
   @AuditLog('workspace.update', 'Workspace', 'workspaceId')
   @ApiOperation({ summary: 'Update workspace details (ADMIN or OWNER only)' })
@@ -80,7 +78,6 @@ export class WorkspacesController {
   }
 
   @Post(':workspaceId/archive')
-  @UseGuards(RolesGuard)
   @Roles(WorkspaceRole.OWNER)
   @AuditLog('workspace.archive', 'Workspace', 'workspaceId')
   @ApiOperation({ summary: 'Archive a workspace (OWNER only)' })
@@ -89,7 +86,6 @@ export class WorkspacesController {
   }
 
   @Delete(':workspaceId')
-  @UseGuards(RolesGuard)
   @Roles(WorkspaceRole.OWNER)
   @HttpCode(HttpStatus.NO_CONTENT)
   @AuditLog('workspace.delete', 'Workspace', 'workspaceId')
@@ -99,7 +95,6 @@ export class WorkspacesController {
   }
 
   @Post(':workspaceId/members')
-  @UseGuards(RolesGuard)
   @Roles(WorkspaceRole.ADMIN)
   @AuditLog('workspace.inviteMember', 'WorkspaceMember')
   @ApiOperation({ summary: 'Invite or update a workspace member (ADMIN or OWNER only)' })

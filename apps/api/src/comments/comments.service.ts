@@ -16,6 +16,10 @@ export class CommentsService {
     private readonly workspaceAccess: WorkspaceAccessService,
   ) {}
 
+  // Workspace membership/role is already enforced by RolesGuard before this runs
+  // (see comments.controller.ts). This only enforces the "own comments only"
+  // rule, which is per-resource and not something a role check can express.
+  private async requireOwnComment(taskId: string, commentId: string, userId: string) {
   private async requireOwnComment(taskId: string, commentId: string, userId: string) {
     const comment = await this.prisma.comment.findUnique({ where: { id: commentId } });
     if (!comment || comment.taskId !== taskId || comment.deletedAt) {
@@ -45,6 +49,7 @@ export class CommentsService {
   }
 
   async create(userId: string, taskId: string, dto: CreateCommentDto) {
+    return this.prisma.comment.create({
     const { task, membership } = await this.workspaceAccess.requireTaskMembership(
       taskId,
       userId,
@@ -71,6 +76,14 @@ export class CommentsService {
     return comment;
   }
 
+  async findAll(taskId: string) {
+    return this.prisma.comment.findMany({
+      where: { taskId },
+      orderBy: { createdAt: 'asc' },
+    });
+  }
+
+  async update(userId: string, taskId: string, commentId: string, dto: UpdateCommentDto) {
   async findAll(userId: string, taskId: string, query: QueryCommentsDto) {
     await this.workspaceAccess.requireTaskMembership(taskId, userId);
 

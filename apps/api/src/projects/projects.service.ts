@@ -13,19 +13,9 @@ export class ProjectsService {
     private readonly cache: CacheService,
   ) {}
 
-  // Membership (not just a valid workspace id) gates every route here, including
-  // reads - this is what keeps one workspace's projects invisible to another's
-  // members (requirement doc Section 15, workspace data leakage).
-  private async requireMembership(workspaceId: string, userId: string) {
-    const membership = await this.prisma.workspaceMember.findUnique({
-      where: { workspaceId_userId: { workspaceId, userId } },
-    });
-    if (!membership) {
-      throw new NotFoundException('Workspace not found.');
-    }
-    return membership;
-  }
-
+  // Workspace membership/role is already enforced by RolesGuard before this runs
+  // (see projects.controller.ts). This only guards against a :projectId that
+  // exists but belongs to a different workspace than the :workspaceId in the route.
   private async findWithinWorkspace(workspaceId: string, projectId: string) {
     const project = await this.prisma.project.findUnique({ where: { id: projectId } });
     if (!project || project.workspaceId !== workspaceId) {
@@ -34,6 +24,8 @@ export class ProjectsService {
     return project;
   }
 
+  async create(workspaceId: string, dto: CreateProjectDto) {
+    return this.prisma.project.create({
   async create(userId: string, workspaceId: string, dto: CreateProjectDto) {
     await this.requireMembership(workspaceId, userId);
     const project = await this.prisma.project.create({
@@ -43,6 +35,17 @@ export class ProjectsService {
     return project;
   }
 
+  async findAll(workspaceId: string, query: QueryProjectsDto) {
+    return this.prisma.project.findMany({
+      where: {
+        workspaceId,
+        ...(query.includeArchived ? {} : { isArchived: false }),
+        ...(query.search
+          ? { name: { contains: query.search, mode: 'insensitive' as const } }
+          : {}),
+      },
+      orderBy: { createdAt: 'desc' },
+    });
   async findAll(userId: string, workspaceId: string, query: QueryProjectsDto) {
     await this.requireMembership(workspaceId, userId);
 
@@ -69,13 +72,10 @@ export class ProjectsService {
     return { items, total, page, limit, totalPages: Math.ceil(total / limit) };
   }
 
-  async findOne(userId: string, workspaceId: string, projectId: string) {
-    await this.requireMembership(workspaceId, userId);
+  async findOne(workspaceId: string, projectId: string) {
     return this.findWithinWorkspace(workspaceId, projectId);
   }
 
-  // Called after RolesGuard has already verified the caller's minimum role,
-  // so this only needs to perform the write.
   async update(workspaceId: string, projectId: string, dto: UpdateProjectDto) {
     await this.findWithinWorkspace(workspaceId, projectId);
     return this.prisma.project.update({ where: { id: projectId }, data: dto });

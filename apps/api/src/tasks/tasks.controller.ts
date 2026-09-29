@@ -18,6 +18,7 @@ import { CreateTaskDto } from './dto/create-task.dto';
 import { UpdateTaskDto } from './dto/update-task.dto';
 import { QueryTasksDto } from './dto/query-tasks.dto';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
+import { WorkspaceScope } from '../common/decorators/workspace-scope.decorator';
 import { AuditLog } from '../common/decorators/audit-log.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
 import { RolesGuard } from '../common/guards/roles.guard';
@@ -25,11 +26,13 @@ import { WorkspaceRole } from '../common/enums/workspace-role.enum';
 
 @ApiTags('tasks')
 @ApiBearerAuth()
+@UseGuards(RolesGuard)
 @Controller('projects/:projectId/tasks')
 export class TasksController {
   constructor(private readonly tasksService: TasksService) {}
 
   @Post()
+  @Roles(WorkspaceRole.MEMBER)
   @UseGuards(RolesGuard)
   @Roles(WorkspaceRole.MEMBER)
   @AuditLog('task.create', 'Task')
@@ -37,35 +40,34 @@ export class TasksController {
   create(
     @CurrentUser('userId') userId: string,
     @Param('projectId', ParseUUIDPipe) projectId: string,
+    @WorkspaceScope('workspaceId') workspaceId: string,
     @Body() dto: CreateTaskDto,
   ) {
-    return this.tasksService.create(userId, projectId, dto);
+    return this.tasksService.create(userId, projectId, workspaceId, dto);
   }
 
   @Get()
+  @Roles(WorkspaceRole.VIEWER)
   @ApiOperation({
     summary: 'List tasks in a project',
     description: 'Supports ?status=&priority=&assigneeId=&sort=&page=&limit=',
   })
   findAll(
-    @CurrentUser('userId') userId: string,
     @Param('projectId', ParseUUIDPipe) projectId: string,
     @Query() query: QueryTasksDto,
   ) {
-    return this.tasksService.findAll(userId, projectId, query);
+    return this.tasksService.findAll(projectId, query);
   }
 
   @Get(':taskId')
+  @Roles(WorkspaceRole.VIEWER)
   @ApiOperation({ summary: 'Get a task by id' })
-  findOne(
-    @CurrentUser('userId') userId: string,
-    @Param('projectId', ParseUUIDPipe) projectId: string,
-    @Param('taskId', ParseUUIDPipe) taskId: string,
-  ) {
-    return this.tasksService.findOne(userId, projectId, taskId);
+  findOne(@Param('taskId', ParseUUIDPipe) taskId: string) {
+    return this.tasksService.findOne(taskId);
   }
 
   @Patch(':taskId')
+  @Roles(WorkspaceRole.MEMBER)
   @UseGuards(RolesGuard)
   @Roles(WorkspaceRole.MEMBER)
   @AuditLog('task.update', 'Task', 'taskId')
@@ -75,15 +77,19 @@ export class TasksController {
       'Status changes must follow TODO -> IN_PROGRESS -> REVIEW -> DONE; illegal transitions are rejected.',
   })
   update(
-    @CurrentUser('userId') userId: string,
-    @Param('projectId', ParseUUIDPipe) projectId: string,
     @Param('taskId', ParseUUIDPipe) taskId: string,
+    @WorkspaceScope('workspaceId') workspaceId: string,
     @Body() dto: UpdateTaskDto,
   ) {
-    return this.tasksService.update(userId, projectId, taskId, dto);
+    return this.tasksService.update(taskId, workspaceId, dto);
   }
 
   @Delete(':taskId')
+  @Roles(WorkspaceRole.ADMIN)
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: 'Delete a task (ADMIN or OWNER only)' })
+  remove(@Param('taskId', ParseUUIDPipe) taskId: string) {
+    return this.tasksService.remove(taskId);
   @UseGuards(RolesGuard)
   @Roles(WorkspaceRole.ADMIN)
   @HttpCode(HttpStatus.NO_CONTENT)

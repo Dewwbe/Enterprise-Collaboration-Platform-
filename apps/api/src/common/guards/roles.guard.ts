@@ -8,8 +8,14 @@ import { Reflector } from '@nestjs/core';
 import { WorkspaceAccessService } from '../access/workspace-access.service';
 import { ROLES_KEY } from '../decorators/roles.decorator';
 import { ROLE_HIERARCHY, WorkspaceRole } from '../enums/workspace-role.enum';
+import { WorkspaceScopeResolver } from '../services/workspace-scope-resolver.service';
 
 /**
+ * Enforces workspace-level RBAC. Resolves the caller's workspace membership via
+ * WorkspaceScopeResolver, which accepts :workspaceId directly or indirectly via
+ * :projectId/:taskId - so the same guard covers Workspaces, Projects, Tasks, and
+ * Comments routes without each module re-deriving workspace context itself.
+ * Fails closed: no membership => 403, unresolvable/foreign scope => 404.
  * Enforces workspace-level RBAC. Resolves the caller's membership role from
  * whichever route param identifies the resource, walking the join chain via
  * WorkspaceAccessService when the route doesn't carry `workspaceId` directly:
@@ -29,6 +35,8 @@ import { ROLE_HIERARCHY, WorkspaceRole } from '../enums/workspace-role.enum';
 export class RolesGuard implements CanActivate {
   constructor(
     private readonly reflector: Reflector,
+    private readonly prisma: PrismaService,
+    private readonly scopeResolver: WorkspaceScopeResolver,
     private readonly workspaceAccess: WorkspaceAccessService,
   ) {}
 
@@ -47,10 +55,19 @@ export class RolesGuard implements CanActivate {
 
     if (!userId) {
       throw new ForbiddenException(
-        'Workspace context is required to evaluate access for this route.',
+        'Authentication is required to evaluate access for this route.',
       );
     }
 
+    const scope = await this.scopeResolver.resolve(request.params);
+
+    const membership = await this.prisma.workspaceMember.findUnique({
+      where: { workspaceId_userId: { workspaceId: scope.workspaceId, userId } },
+    });
+
+    if (!membership) {
+      throw new ForbiddenException('You are not a member of this workspace.');
+    }
     const membership = await this.resolveMembership(request.params ?? {}, userId);
 
     const minimumRequired = Math.min(
@@ -62,8 +79,9 @@ export class RolesGuard implements CanActivate {
       throw new ForbiddenException('Your workspace role does not permit this action.');
     }
 
-    // Attach for downstream handlers/services that want the resolved role
+    // Attach for downstream handlers/services that want the resolved scope/role
     // without a second lookup.
+    request.workspaceScope = scope;
     request.workspaceMembership = membership;
     return true;
   }
